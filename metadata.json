@@ -1,0 +1,6 @@
+{
+  "name": "Watch py",
+  "description": "A professional animated streaming platform with a dark cinematic aesthetic, featuring hero carousels, scrollable content rows, search, interactive video preview modal, watchlist management, and rich micro-interactions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
