@@ -75,7 +75,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 pb-12 overflow-y-auto custom-scrollbar">
+      <div className="fixed inset-0 z-50 overflow-y-auto custom-scrollbar p-4 sm:p-6 font-sans">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -85,9 +85,10 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           className="fixed inset-0 bg-black/85 backdrop-blur-xl"
         />
 
-        {/* Modal Container */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: -20 }}
+        <div className="min-h-full w-full flex flex-col items-center pt-8 sm:pt-16 pb-12">
+          {/* Modal Container */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: -20 }}
           transition={{ type: 'spring', stiffness: 350, damping: 30 }}
@@ -221,6 +222,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </div>
+  </AnimatePresence>
   );
 };

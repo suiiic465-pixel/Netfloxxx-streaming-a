@@ -78,20 +78,21 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-2xl overflow-y-auto font-sans">
+      <div className="fixed inset-0 z-50 overflow-y-auto custom-scrollbar bg-black/90 backdrop-blur-2xl p-4 sm:p-6 font-sans">
         {/* Ambient background glow */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-[#2AC9B0]/10 rounded-full blur-[140px] animate-pulse" />
           <div className="absolute bottom-1/4 right-1/3 w-96 h-96 bg-[#FFB238]/10 rounded-full blur-[140px] animate-pulse" />
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.94, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.94, y: 15 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="relative w-full max-w-xl my-8 glass-panel border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden text-left"
-        >
+        <div className="min-h-full w-full flex flex-col items-center py-6 sm:py-10">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 15 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="relative w-full max-w-xl my-auto glass-panel border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden text-left"
+          >
           {/* Close button */}
           <button
             onClick={onClose}
@@ -177,6 +178,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </div>
+  </AnimatePresence>
   );
 };

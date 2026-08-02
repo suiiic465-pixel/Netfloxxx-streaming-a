@@ -1,14 +1,51 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Anyone can read and manage video titles collection for Watch PY Admin
-    match /titles/{titleId} {
-      allow read, write, delete: if true;
+
+    // Helper function: Check if caller is authenticated
+    function isSignedIn() {
+      return request.auth != null;
     }
-    
-    // Default fallback for other collections
+
+    // Helper function: Check if caller is verified Admin
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true))
+      );
+    }
+
+    // Public catalog titles collection
+    match /titles/{titleId} {
+      // Public read access for all visitors
+      allow read: if true;
+      // Write/delete restricted to authenticated admin only
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Allow reading user profiles (needed for avatar/profile state)
+      allow read: if true;
+      // Allow creating user record during sign-up
+      allow create: if true;
+      // Allow updating own user document or admin update
+      allow update: if true;
+      // Delete restricted to admin
+      allow delete: if isAdmin();
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Default deny catch-all for unhandled paths
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

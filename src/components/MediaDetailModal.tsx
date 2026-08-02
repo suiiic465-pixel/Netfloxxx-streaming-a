@@ -101,7 +101,7 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 lg:p-6 overflow-y-auto custom-scrollbar">
+      <div className="fixed inset-0 z-50 overflow-y-auto custom-scrollbar p-2 sm:p-4 lg:p-6">
         {/* Backdrop overlay */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -111,14 +111,15 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
           className="fixed inset-0 bg-black/80 backdrop-blur-md"
         />
 
-        {/* Modal Container */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-          className="relative w-full max-w-4xl bg-[#10121A] border border-white/10 rounded-3xl overflow-hidden shadow-2xl z-10 my-auto"
-        >
+        <div className="min-h-full w-full flex flex-col items-center py-6 sm:py-10">
+          {/* Modal Container */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+            className="relative w-full max-w-4xl bg-[#10121A] border border-white/10 rounded-3xl overflow-hidden shadow-2xl z-10 my-auto"
+          >
           {/* Close Button */}
           <button
             onClick={onClose}
@@ -365,6 +366,7 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </div>
+  </AnimatePresence>
   );
 };

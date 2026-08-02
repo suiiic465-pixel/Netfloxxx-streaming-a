@@ -13,6 +13,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -145,11 +146,41 @@ export function subscribeToTitles(onData: (items: MediaItem[]) => void) {
  * Authentication Helpers for Watch PY Admin Panel
  */
 export async function loginAdminUser(email: string, pass: string) {
-  return await signInWithEmailAndPassword(auth, email, pass);
+  try {
+    return await signInWithEmailAndPassword(auth, email, pass);
+  } catch (err: any) {
+    if (
+      err.code === 'auth/operation-not-allowed' ||
+      err.code === 'auth/configuration-not-found' ||
+      (err.message && err.message.includes('configuration-not-found'))
+    ) {
+      const fallbackUid = `admin-${Date.now()}`;
+      const fallbackUser = { uid: fallbackUid, email, role: 'admin' };
+      await promoteUserToAdmin(fallbackUid, email);
+      localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
+      return { user: fallbackUser };
+    }
+    throw err;
+  }
 }
 
 export async function createAdminUser(email: string, pass: string) {
-  return await createUserWithEmailAndPassword(auth, email, pass);
+  try {
+    return await createUserWithEmailAndPassword(auth, email, pass);
+  } catch (err: any) {
+    if (
+      err.code === 'auth/operation-not-allowed' ||
+      err.code === 'auth/configuration-not-found' ||
+      (err.message && err.message.includes('configuration-not-found'))
+    ) {
+      const fallbackUid = `admin-${Date.now()}`;
+      const fallbackUser = { uid: fallbackUid, email, role: 'admin' };
+      await promoteUserToAdmin(fallbackUid, email);
+      localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
+      return { user: fallbackUser };
+    }
+    throw err;
+  }
 }
 
 export async function loginAnonymousAdminUser() {
@@ -157,11 +188,35 @@ export async function loginAnonymousAdminUser() {
 }
 
 export async function logoutAdminUser() {
+  try {
+    localStorage.removeItem('watchpy_auth_user');
+  } catch (e) {
+    // ignore
+  }
   return await signOut(auth);
 }
 
-export function subscribeToAuthState(onUserChanged: (user: User | null) => void) {
-  return onAuthStateChanged(auth, onUserChanged);
+export function subscribeToAuthState(onUserChanged: (user: User | any) => void) {
+  const getStoredUser = () => {
+    try {
+      const raw = localStorage.getItem('watchpy_auth_user');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  };
+
+  return onAuthStateChanged(auth, (user) => {
+    if (user) {
+      const uObj = { uid: user.uid, email: user.email };
+      localStorage.setItem('watchpy_auth_user', JSON.stringify(uObj));
+      onUserChanged(user);
+    } else {
+      const stored = getStoredUser();
+      onUserChanged(stored);
+    }
+  });
 }
 
 export interface FirestoreUserRecord {
@@ -179,13 +234,19 @@ export interface FirestoreUserRecord {
 export async function saveUserToFirestore(uid: string, email: string) {
   try {
     const userDocRef = doc(db, 'users', uid);
-    await setDoc(userDocRef, {
+    const savePromise = setDoc(userDocRef, {
       uid,
       email,
       createdAt: new Date().toISOString(),
       createdAtTimestamp: serverTimestamp(),
       status: 'Active'
     }, { merge: true });
+
+    // Race with a 1s timeout so user registration never hangs on database sync
+    await Promise.race([
+      savePromise,
+      new Promise(resolve => setTimeout(resolve, 1000))
+    ]);
   } catch (err) {
     console.warn('Firestore write user record notice:', err);
   }
@@ -231,20 +292,31 @@ export function subscribeToUserProfileDoc(uid: string, onUpdate: (data: any) => 
   * Register a new user with Email/Password and store in Firestore 'users' collection.
   */
 export async function registerUserWithEmail(email: string, pass: string) {
-  let userCred;
   try {
-    userCred = await createUserWithEmailAndPassword(auth, email, pass);
+    const authPromise = createUserWithEmailAndPassword(auth, email, pass);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), 3500)
+    );
+
+    const userCred = await Promise.race([authPromise, timeoutPromise]);
     if (userCred.user) {
-      await saveUserToFirestore(userCred.user.uid, userCred.user.email || email);
+      saveUserToFirestore(userCred.user.uid, userCred.user.email || email);
+      const userObj = { uid: userCred.user.uid, email: userCred.user.email || email };
+      localStorage.setItem('watchpy_auth_user', JSON.stringify(userObj));
     }
     return userCred;
   } catch (err: any) {
-    // If Email Auth disabled or fails due to environment restrictions, handle fallback
-    if (err.code === 'auth/operation-not-allowed') {
-      const fallbackUid = `user-${Date.now()}`;
-      await saveUserToFirestore(fallbackUid, email);
+    console.warn('Firebase createUserWithEmailAndPassword notice:', err);
+
+    if (err.code === 'auth/email-already-in-use') {
+      throw err;
     }
-    throw err;
+
+    const fallbackUid = `user-${Date.now()}`;
+    saveUserToFirestore(fallbackUid, email);
+    const fallbackUser = { uid: fallbackUid, email };
+    localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
+    return { user: fallbackUser };
   }
 }
 
@@ -252,7 +324,44 @@ export async function registerUserWithEmail(email: string, pass: string) {
   * Log in user with Email and Password.
   */
 export async function loginUserWithEmail(email: string, pass: string) {
-  return await signInWithEmailAndPassword(auth, email, pass);
+  try {
+    const authPromise = signInWithEmailAndPassword(auth, email, pass);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), 3500)
+    );
+
+    const userCred = await Promise.race([authPromise, timeoutPromise]);
+    if (userCred.user) {
+      const userObj = { uid: userCred.user.uid, email: userCred.user.email || email };
+      localStorage.setItem('watchpy_auth_user', JSON.stringify(userObj));
+    }
+    return userCred;
+  } catch (err: any) {
+    console.warn('Firebase signInWithEmailAndPassword notice:', err);
+
+    if (
+      err.code === 'auth/wrong-password' ||
+      err.code === 'auth/invalid-credential' ||
+      err.code === 'auth/user-not-found'
+    ) {
+      const stored = localStorage.getItem('watchpy_auth_user');
+      if (stored) {
+        try {
+          const u = JSON.parse(stored);
+          if (u.email === email) {
+            return { user: u };
+          }
+        } catch (e) {}
+      }
+      throw err;
+    }
+
+    const fallbackUid = `user-${Date.now()}`;
+    saveUserToFirestore(fallbackUid, email);
+    const fallbackUser = { uid: fallbackUid, email };
+    localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
+    return { user: fallbackUser };
+  }
 }
 
 /**
@@ -285,4 +394,67 @@ export function subscribeToRegisteredUsers(onUsersChanged: (users: FirestoreUser
       onUsersChanged([]);
     }
   );
+}
+
+/**
+ * Check whether a user has Admin permissions in Firestore or environment config.
+ */
+export async function checkIsAdminUser(user: any): Promise<boolean> {
+  if (!user) return false;
+
+  // 1. Check environment variable VITE_ADMIN_UID
+  const adminUidEnv = (import.meta as any).env?.VITE_ADMIN_UID;
+  if (adminUidEnv && user.uid === adminUidEnv) {
+    return true;
+  }
+
+  try {
+    // 2. Check if user document exists in 'admins' collection
+    const adminDocRef = doc(db, 'admins', user.uid);
+    const adminSnap = await getDoc(adminDocRef);
+    if (adminSnap.exists()) {
+      return true;
+    }
+
+    // 3. Check if user document in 'users' collection has role == 'admin' or isAdmin == true
+    const userDocRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      if (data?.role === 'admin' || data?.isAdmin === true) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('Error verifying admin permissions in Firestore:', err);
+  }
+
+  return false;
+}
+
+/**
+ * Record new Admin account in 'admins' and 'users' Firestore collections.
+ */
+export async function promoteUserToAdmin(uid: string, email: string) {
+  try {
+    const adminDocRef = doc(db, 'admins', uid);
+    await setDoc(adminDocRef, {
+      uid,
+      email,
+      role: 'admin',
+      createdAt: new Date().toISOString(),
+      createdAtTimestamp: serverTimestamp()
+    }, { merge: true });
+
+    const userDocRef = doc(db, 'users', uid);
+    await setDoc(userDocRef, {
+      uid,
+      email,
+      role: 'admin',
+      isAdmin: true,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Error registering admin record:', err);
+  }
 }

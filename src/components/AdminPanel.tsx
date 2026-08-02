@@ -51,7 +51,6 @@ import { User as FirebaseUser } from 'firebase/auth';
 import {
   loginAdminUser,
   createAdminUser,
-  loginAnonymousAdminUser,
   logoutAdminUser,
   subscribeToAuthState,
   uploadFileToStorage,
@@ -59,6 +58,8 @@ import {
   updateTitleInFirestore,
   deleteTitleFromFirestore,
   subscribeToRegisteredUsers,
+  checkIsAdminUser,
+  promoteUserToAdmin,
   FirestoreUserRecord
 } from '../lib/firebaseService';
 import { firebaseConfig } from '../lib/firebase';
@@ -95,13 +96,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onPlayMedia
 }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [isGuestSession, setIsGuestSession] = useState<boolean>(false);
+  const [isAdminVerified, setIsAdminVerified] = useState<boolean>(false);
 
-  const isAuthenticated = !!currentUser || isGuestSession;
+  const isAuthenticated = !!currentUser && isAdminVerified;
 
-  // Auth Form State
-  const [authEmail, setAuthEmail] = useState('admin@watchpy.com');
-  const [authPassword, setAuthPassword] = useState('WatchPyAdmin2026!');
+  // Auth Form State - empty by default, no hardcoded secrets
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -163,10 +164,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editingTitle, setEditingTitle] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Subscribe to Firebase Auth changes
+  // Subscribe to Firebase Auth changes & verify Admin role
   useEffect(() => {
-    const unsubscribe = subscribeToAuthState((user) => {
+    const unsubscribe = subscribeToAuthState(async (user) => {
       setCurrentUser(user);
+      if (user) {
+        const isVerified = await checkIsAdminUser(user);
+        setIsAdminVerified(isVerified);
+        if (!isVerified) {
+          setAuthError('Access Denied: Your account does not have admin privileges.');
+        } else {
+          setAuthError(null);
+        }
+      } else {
+        setIsAdminVerified(false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -188,44 +200,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     try {
       if (isSignUpMode) {
-        await createAdminUser(authEmail, authPassword);
-        showToast('Admin account created and logged in!');
+        const cred = await createAdminUser(authEmail, authPassword);
+        if (cred?.user) {
+          await promoteUserToAdmin(cred.user.uid, cred.user.email || authEmail);
+          setIsAdminVerified(true);
+          showToast('Admin account created and logged in!');
+        }
       } else {
-        await loginAdminUser(authEmail, authPassword);
-        showToast('Successfully logged into Admin Panel');
+        const cred = await loginAdminUser(authEmail, authPassword);
+        if (cred?.user) {
+          const isVerified = await checkIsAdminUser(cred.user);
+          if (isVerified) {
+            setIsAdminVerified(true);
+            showToast('Successfully logged into Admin Panel');
+          } else {
+            setIsAdminVerified(false);
+            await logoutAdminUser();
+            setAuthError('Access Denied: Your account does not have admin privileges.');
+          }
+        }
       }
     } catch (err: any) {
-      if (err.code === 'auth/operation-not-allowed') {
-        setIsGuestSession(true);
-        showToast('Email Auth is disabled in Firebase Console. Quick Admin Session Activated!');
-      } else {
-        console.warn('Firebase auth notice:', err.message);
-        let errMsg = err.message || 'Authentication failed. Please check credentials.';
-        if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-          errMsg = 'Invalid email or password.';
-        } else if (err.code === 'auth/user-not-found') {
-          errMsg = 'No account found. Switch to Sign Up or try creating account.';
-        }
-        setAuthError(errMsg);
+      console.warn('Firebase auth notice:', err.message);
+      let errMsg = err.message || 'Authentication failed. Please check credentials.';
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        errMsg = 'Invalid email or password.';
+      } else if (err.code === 'auth/user-not-found') {
+        errMsg = 'No account found. Switch to Sign Up or try creating account.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        errMsg = 'Email/Password sign-in is disabled in Firebase Console. Please enable it in Authentication settings.';
       }
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setIsAuthLoading(true);
-    setAuthError(null);
-    try {
-      setIsGuestSession(true);
-      showToast('Quick Admin Studio Session Activated!');
+      setAuthError(errMsg);
     } finally {
       setIsAuthLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    setIsGuestSession(false);
+    setIsAdminVerified(false);
     await logoutAdminUser();
     showToast('Logged out of Admin');
   };
@@ -418,7 +430,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07080B] text-[#E2E8F0] overflow-hidden font-sans select-none">
+      <div className="fixed inset-0 z-50 bg-[#07080B] text-[#E2E8F0] overflow-y-auto custom-scrollbar font-sans select-none">
         {/* Toast Notification Container */}
         <AnimatePresence>
           {toastMessage && (
@@ -444,11 +456,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* AUTHENTICATION GATE / LOGIN OVERLAY */}
         {!isAuthenticated ? (
-          <div className="w-full h-full flex items-center justify-center p-4 bg-gradient-to-br from-[#090A0F] via-[#0D0E16] to-[#08090D]">
+          <div className="min-h-full w-full flex flex-col items-center p-4 py-8 bg-gradient-to-br from-[#090A0F] via-[#0D0E16] to-[#08090D] overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-md p-8 rounded-2xl bg-[#12141D]/90 border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl text-center space-y-6 relative overflow-hidden"
+              className="w-full max-w-md my-auto p-8 rounded-2xl bg-[#12141D]/90 border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] backdrop-blur-2xl text-center space-y-6 relative overflow-hidden"
             >
               <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#FFB238]/10 rounded-full blur-3xl pointer-events-none" />
               <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -460,7 +472,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div>
                 <h3 className="text-2xl font-bold text-white tracking-tight">Watch PY Admin Studio</h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Authenticate or launch Quick Admin Mode to manage titles and video assets.
+                  Authenticate with authorized admin credentials to access catalog management.
                 </p>
               </div>
 
@@ -513,24 +525,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </button>
               </form>
-
-              <div className="relative my-2 flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10" />
-                </div>
-                <span className="relative bg-[#12141D] px-3 text-[10px] text-slate-500 uppercase tracking-widest font-mono">
-                  OR BYPASS
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 transition-all group"
-              >
-                <Shield className="w-4 h-4 text-[#FFB238] group-hover:scale-110 transition-transform" />
-                <span>Quick Admin Studio Session (Instant Access)</span>
-              </button>
 
               <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-white/5">
                 <button

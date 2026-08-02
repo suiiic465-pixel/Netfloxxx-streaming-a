@@ -13,7 +13,7 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SkeletonRow } from './components/SkeletonRow';
 import { Footer } from './components/Footer';
 import { AdminPanel } from './components/AdminPanel';
-import { subscribeToTitles, subscribeToAuthState, logoutAdminUser, subscribeToUserProfileDoc } from './lib/firebaseService';
+import { subscribeToTitles, subscribeToAuthState, logoutAdminUser, subscribeToUserProfileDoc, checkIsAdminUser } from './lib/firebaseService';
 import { HERO_SLIDES, ALL_MEDIA, USER_PROFILES, INITIAL_NOTIFICATIONS } from './data/mockData';
 import { MediaItem, UserProfile, AppNotification } from './types';
 import { Bookmark, Sparkles, Film, Tv, Play, Trash2, Shield, User, LockKeyhole } from 'lucide-react';
@@ -26,6 +26,7 @@ export default function App() {
 
   // Auth & Modal State
   const [authUser, setAuthUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
   const [authInterceptMessage, setAuthInterceptMessage] = useState<string | null>(null);
@@ -33,11 +34,52 @@ export default function App() {
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
   useEffect(() => {
-    const unsub = subscribeToAuthState((user) => {
+    const unsub = subscribeToAuthState(async (user) => {
       setAuthUser(user);
+      if (user) {
+        const isUserAdmin = await checkIsAdminUser(user);
+        setIsAdmin(isUserAdmin);
+      } else {
+        setIsAdmin(false);
+      }
     });
     return () => unsub();
   }, []);
+
+  // Listen for unlisted private admin route (/admin or #admin) and redirect non-admin users
+  useEffect(() => {
+    const checkAdminRoute = () => {
+      const isNavigatingToAdmin = window.location.pathname === '/admin' || window.location.hash === '#admin';
+      if (isNavigatingToAdmin) {
+        if (authUser && !isAdmin) {
+          window.history.replaceState({}, '', '/');
+          setActiveTab('home');
+          setIsAdminOpen(false);
+          showToast('Access Denied: Redirected to Home');
+        } else {
+          setIsAdminOpen(true);
+        }
+      }
+    };
+
+    checkAdminRoute();
+    window.addEventListener('popstate', checkAdminRoute);
+    window.addEventListener('hashchange', checkAdminRoute);
+    return () => {
+      window.removeEventListener('popstate', checkAdminRoute);
+      window.removeEventListener('hashchange', checkAdminRoute);
+    };
+  }, [authUser, isAdmin]);
+
+  // Guard against non-admin users accessing admin panel
+  useEffect(() => {
+    const isNavigatingToAdmin = window.location.pathname === '/admin' || window.location.hash === '#admin';
+    if ((isAdminOpen || isNavigatingToAdmin) && authUser && !isAdmin) {
+      window.history.replaceState({}, '', '/');
+      setActiveTab('home');
+      setIsAdminOpen(false);
+    }
+  }, [authUser, isAdmin, isAdminOpen]);
 
   // Global Keyboard Navigation Shortcuts Handler
   useEffect(() => {
@@ -294,7 +336,15 @@ export default function App() {
         }}
         initialMode={authMode}
         interceptMessage={authInterceptMessage}
-        onAuthSuccess={(email) => {
+        onAuthSuccess={(email, userObj) => {
+          if (userObj) {
+            setAuthUser(userObj);
+            checkIsAdminUser(userObj).then((isUserAdmin) => setIsAdmin(isUserAdmin));
+          } else {
+            const fallbackUser = { uid: `user-${Date.now()}`, email };
+            setAuthUser(fallbackUser);
+            checkIsAdminUser(fallbackUser).then((isUserAdmin) => setIsAdmin(isUserAdmin));
+          }
           showToast(`Signed in as ${email}`);
         }}
       />
@@ -321,7 +371,12 @@ export default function App() {
       {/* Admin Panel Modal */}
       <AdminPanel
         isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
+        onClose={() => {
+          setIsAdminOpen(false);
+          if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
+            window.history.replaceState({}, '', '/');
+          }
+        }}
         allTitles={mediaList}
         onPlayMedia={handlePlayMedia}
       />
@@ -364,7 +419,7 @@ export default function App() {
         myListCount={myListIds.length}
         onOpenAvatarStudio={() => setIsAvatarStudioOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
-        onOpenAdmin={() => setIsAdminOpen(true)}
+        isAdmin={isAdmin}
         isLoggedIn={!!authUser}
         userEmail={authUser?.email}
         onOpenAuth={(mode) => handleOpenAuth(mode)}
@@ -373,82 +428,6 @@ export default function App() {
 
       {/* Main Content Areas */}
       <main className="relative z-10">
-        {/* Welcome Profile Greeting / Guest CTA Banner */}
-        <div className="pt-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between p-3.5 sm:p-4 rounded-2xl glass-panel border border-white/10 shadow-lg my-2 gap-3">
-            {authUser ? (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setIsAvatarStudioOpen(true)}
-                  className="relative group focus:outline-none"
-                  title="Click to change cinematic avatar"
-                >
-                  <img
-                    src={currentProfile.avatar}
-                    alt={currentProfile.name}
-                    referrerPolicy="no-referrer"
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-[#2AC9B0] shadow-lg group-hover:scale-105 transition-transform"
-                  />
-                  <span className="absolute -bottom-1 -right-1 p-0.5 rounded-full bg-[#FFB238] text-black">
-                    <Sparkles className="w-2.5 h-2.5" />
-                  </span>
-                </button>
-                <div>
-                  <p className="text-xs font-mono-meta text-slate-400">Signed in as</p>
-                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                    <span>{currentProfile.name || authUser.email || 'Watch PY Member'}</span>
-                    <span className="px-2 py-0.5 text-[10px] font-mono-meta bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/30">
-                      4K Pass Active
-                    </span>
-                  </h3>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-[#FFB238]/10 text-[#FFB238] border border-[#FFB238]/20">
-                  <LockKeyhole className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-mono-meta text-slate-400">Public Preview Mode</p>
-                  <h3 className="text-xs sm:text-sm font-semibold text-white">
-                    Explore movies & series catalog. Sign in or create an account to play titles.
-                  </h3>
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              {authUser && (
-                <button
-                  onClick={() => setIsAvatarStudioOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#2AC9B0]/15 hover:bg-[#2AC9B0]/25 text-xs font-mono-meta text-[#2AC9B0] border border-[#2AC9B0]/30 font-bold transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-[#2AC9B0]" />
-                  <span>Avatar Studio</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => setIsAdminOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFB238]/15 hover:bg-[#FFB238]/25 text-xs font-mono-meta text-[#FFB238] border border-[#FFB238]/30 font-bold transition-colors"
-              >
-                <Shield className="w-3.5 h-3.5 text-[#FFB238]" />
-                <span>Admin Studio</span>
-              </button>
-
-              {!authUser && (
-                <button
-                  onClick={() => handleOpenAuth('signup', 'Sign up to streamWatch PY titles.')}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#FFB238] hover:bg-[#ffa312] text-xs font-bold text-black transition-colors shadow-md shadow-[#FFB238]/20"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Create Account</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Tab Loading Skeletons */}
         {isTabLoading ? (
           <div className="py-12 space-y-8">
