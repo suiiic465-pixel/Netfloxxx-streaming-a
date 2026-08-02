@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Plus, Check, Info, ThumbsUp, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { Play, Plus, Check, Info, ThumbsUp, Sparkles, Volume2, VolumeX, ArrowDownToLine, CheckCircle2, Loader2 } from 'lucide-react';
 import { MediaItem } from '../types';
 
 interface MediaCardProps {
@@ -10,6 +10,9 @@ interface MediaCardProps {
   isSavedInList: boolean;
   onToggleMyList: (mediaId: string) => void;
   showProgress?: boolean;
+  isDownloaded?: boolean;
+  downloadProgress?: number;
+  onToggleDownload?: (mediaId: string) => void;
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({
@@ -19,6 +22,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   isSavedInList,
   onToggleMyList,
   showProgress = false,
+  isDownloaded = false,
+  downloadProgress,
+  onToggleDownload,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -61,18 +67,26 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
           {/* Top Badges */}
           <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between z-10 pointer-events-none">
-            {item.isTop10 && item.top10Rank ? (
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono-meta font-extrabold bg-[#FFB238] text-[#0A0B0F] shadow-md flex items-center gap-1">
-                <Sparkles className="w-3 h-3 fill-current" />
-                #{item.top10Rank}
-              </span>
-            ) : item.isNewRelease ? (
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono-meta font-bold bg-[#2AC9B0] text-[#0A0B0F] shadow-md">
-                NEW
-              </span>
-            ) : (
-              <span />
-            )}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {item.isTop10 && item.top10Rank ? (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono-meta font-extrabold bg-[#FFB238] text-[#0A0B0F] shadow-md flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 fill-current" />
+                  #{item.top10Rank}
+                </span>
+              ) : item.isNewRelease ? (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono-meta font-bold bg-[#2AC9B0] text-[#0A0B0F] shadow-md">
+                  NEW
+                </span>
+              ) : null}
+
+              {/* Offline Downloaded Badge */}
+              {isDownloaded && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono-meta font-bold bg-[#FFB238] text-[#0A0B0F] shadow-md flex items-center gap-1">
+                  <ArrowDownToLine className="w-3 h-3 stroke-[2.5]" />
+                  Downloaded
+                </span>
+              )}
+            </div>
 
             <span className="px-1.5 py-0.5 text-[9px] font-mono-meta font-bold bg-black/60 backdrop-blur-md border border-white/20 rounded text-slate-200">
               {item.resolution}
@@ -172,6 +186,43 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               >
                 {isSavedInList ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
               </motion.button>
+
+              {/* Download Action Button */}
+              {onToggleDownload && (
+                <motion.button
+                  whileHover={{ scale: 1.15 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleDownload(item.id);
+                  }}
+                  className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                    downloadProgress !== undefined
+                      ? 'bg-[#FFB238]/30 text-[#FFB238] border border-[#FFB238]/50'
+                      : isDownloaded
+                      ? 'bg-[#FFB238]/20 text-[#FFB238] border border-[#FFB238]/40'
+                      : 'bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white'
+                  }`}
+                  title={
+                    downloadProgress !== undefined
+                      ? `Downloading (${downloadProgress}%)`
+                      : isDownloaded
+                      ? 'Downloaded for offline (Click to remove)'
+                      : 'Download for offline'
+                  }
+                >
+                  {downloadProgress !== undefined ? (
+                    <div className="flex items-center gap-1 text-[10px] font-mono-meta font-bold">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FFB238]" />
+                      <span>{downloadProgress}%</span>
+                    </div>
+                  ) : isDownloaded ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#FFB238]" />
+                  ) : (
+                    <ArrowDownToLine className="w-3.5 h-3.5" />
+                  )}
+                </motion.button>
+              )}
 
               <motion.button
                 whileHover={{ scale: 1.15 }}

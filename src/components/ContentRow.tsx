@@ -13,6 +13,9 @@ interface ContentRowProps {
   myListIds: string[];
   onToggleMyList: (mediaId: string) => void;
   showProgress?: boolean;
+  downloadedIds?: string[];
+  downloadingProgressMap?: Record<string, number>;
+  onToggleDownload?: (mediaId: string) => void;
 }
 
 export const ContentRow: React.FC<ContentRowProps> = ({
@@ -24,6 +27,9 @@ export const ContentRow: React.FC<ContentRowProps> = ({
   myListIds,
   onToggleMyList,
   showProgress = false,
+  downloadedIds = [],
+  downloadingProgressMap = {},
+  onToggleDownload,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +100,9 @@ export const ContentRow: React.FC<ContentRowProps> = ({
             isSavedInList={myListIds.includes(item.id)}
             onToggleMyList={onToggleMyList}
             showProgress={showProgress}
+            isDownloaded={downloadedIds.includes(item.id)}
+            downloadProgress={downloadingProgressMap[item.id]}
+            onToggleDownload={onToggleDownload}
           />
         ))}
       </div>

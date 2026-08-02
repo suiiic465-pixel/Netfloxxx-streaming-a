@@ -6,7 +6,7 @@ import { ContentRow } from './components/ContentRow';
 import { PageLoadSplash } from './components/PageLoadSplash';
 import { SkeletonRow } from './components/SkeletonRow';
 import { Footer } from './components/Footer';
-import { subscribeToTitles, subscribeToAuthState, logoutAdminUser, subscribeToUserProfileDoc, checkIsAdminUser } from './lib/firebaseService';
+import { subscribeToTitles, subscribeToAuthState, logoutAdminUser, subscribeToUserProfileDoc, checkIsAdminUser, saveUserDownloadsToFirestore } from './lib/firebaseService';
 import { HERO_SLIDES, ALL_MEDIA, USER_PROFILES, INITIAL_NOTIFICATIONS } from './data/mockData';
 import { MediaItem, UserProfile, AppNotification } from './types';
 import { Bookmark, Sparkles, Film, Tv, Play, Trash2, Shield, User, LockKeyhole } from 'lucide-react';
@@ -19,6 +19,7 @@ const AvatarSelectorModal = lazy(() => import('./components/AvatarSelectorModal'
 const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then(m => ({ default: m.ShortcutsModal })));
 const VideoPlayerModal = lazy(() => import('./components/VideoPlayerModal').then(m => ({ default: m.VideoPlayerModal })));
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const DownloadsPage = lazy(() => import('./components/DownloadsPage').then(m => ({ default: m.DownloadsPage })));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -197,6 +198,39 @@ export default function App() {
     }
   });
 
+  // Persistent Downloads State
+  const [downloadedIds, setDownloadedIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('watchpy_downloads');
+      return saved ? JSON.parse(saved) : ['py-cyberpunk-2099', 'py-apex-formula'];
+    } catch {
+      return ['py-cyberpunk-2099', 'py-apex-formula'];
+    }
+  });
+
+  // Simulated active download progress map (mediaId -> percentage 0..100)
+  const [downloadingProgressMap, setDownloadingProgressMap] = useState<Record<string, number>>({});
+
+  // Sync downloads with localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('watchpy_downloads', JSON.stringify(downloadedIds));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [downloadedIds]);
+
+  // Sync downloads with Firestore user profile document
+  useEffect(() => {
+    if (!authUser?.uid) return;
+    const unsub = subscribeToUserProfileDoc(authUser.uid, (docData) => {
+      if (docData && Array.isArray(docData.downloads)) {
+        setDownloadedIds(docData.downloads);
+      }
+    });
+    return () => unsub();
+  }, [authUser?.uid]);
+
   // Notifications State
   const [notifications, setNotifications] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS);
 
@@ -229,6 +263,61 @@ export default function App() {
       setMyListIds((prev) => [...prev, mediaId]);
       showToast(`Added "${item.title}" to My List`);
     }
+  };
+
+  const handleToggleDownload = (mediaId: string) => {
+    const item = mediaList.find((m) => m.id === mediaId);
+    if (!item) return;
+
+    if (!authUser) {
+      handleOpenAuth('signup', 'Sign up or log in to download movies and series for offline viewing.');
+      return;
+    }
+
+    if (downloadedIds.includes(mediaId)) {
+      const updated = downloadedIds.filter((id) => id !== mediaId);
+      setDownloadedIds(updated);
+      if (authUser?.uid) {
+        saveUserDownloadsToFirestore(authUser.uid, updated);
+      }
+      showToast(`Removed "${item.title}" from Downloads`);
+    } else {
+      if (downloadingProgressMap[mediaId] !== undefined) return;
+
+      setDownloadingProgressMap((prev) => ({ ...prev, [mediaId]: 10 }));
+
+      let currentProgress = 10;
+      const interval = setInterval(() => {
+        currentProgress += Math.floor(Math.random() * 22) + 16;
+        if (currentProgress >= 100) {
+          clearInterval(interval);
+          setDownloadingProgressMap((prev) => {
+            const next = { ...prev };
+            delete next[mediaId];
+            return next;
+          });
+          setDownloadedIds((prev) => {
+            if (prev.includes(mediaId)) return prev;
+            const updated = [...prev, mediaId];
+            if (authUser?.uid) {
+              saveUserDownloadsToFirestore(authUser.uid, updated);
+            }
+            return updated;
+          });
+          showToast(`Downloaded "${item.title}" for offline viewing!`);
+        } else {
+          setDownloadingProgressMap((prev) => ({ ...prev, [mediaId]: currentProgress }));
+        }
+      }, 150);
+    }
+  };
+
+  const handleClearAllDownloads = () => {
+    setDownloadedIds([]);
+    if (authUser?.uid) {
+      saveUserDownloadsToFirestore(authUser.uid, []);
+    }
+    showToast('Cleared all offline downloads');
   };
 
   const handleMarkNotificationRead = (id: string) => {
@@ -404,6 +493,7 @@ export default function App() {
         profiles={USER_PROFILES}
         onSelectProfile={setCurrentProfile}
         myListCount={myListIds.length}
+        downloadedCount={downloadedIds.length}
         onOpenAvatarStudio={() => setIsAvatarStudioOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         isAdmin={isAdmin}
@@ -433,6 +523,9 @@ export default function App() {
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
                   allMedia={mediaList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
 
                 {/* Content Rows */}
@@ -447,6 +540,9 @@ export default function App() {
                       myListIds={myListIds}
                       onToggleMyList={handleToggleMyList}
                       showProgress={true}
+                      downloadedIds={downloadedIds}
+                      downloadingProgressMap={downloadingProgressMap}
+                      onToggleDownload={handleToggleDownload}
                     />
                   )}
 
@@ -458,6 +554,9 @@ export default function App() {
                     onOpenInfoModal={handleOpenInfoModal}
                     myListIds={myListIds}
                     onToggleMyList={handleToggleMyList}
+                    downloadedIds={downloadedIds}
+                    downloadingProgressMap={downloadingProgressMap}
+                    onToggleDownload={handleToggleDownload}
                   />
 
                   <ContentRow
@@ -468,6 +567,9 @@ export default function App() {
                     onOpenInfoModal={handleOpenInfoModal}
                     myListIds={myListIds}
                     onToggleMyList={handleToggleMyList}
+                    downloadedIds={downloadedIds}
+                    downloadingProgressMap={downloadingProgressMap}
+                    onToggleDownload={handleToggleDownload}
                   />
 
                   <ContentRow
@@ -478,6 +580,9 @@ export default function App() {
                     onOpenInfoModal={handleOpenInfoModal}
                     myListIds={myListIds}
                     onToggleMyList={handleToggleMyList}
+                    downloadedIds={downloadedIds}
+                    downloadingProgressMap={downloadingProgressMap}
+                    onToggleDownload={handleToggleDownload}
                   />
                 </div>
               </>
@@ -501,6 +606,9 @@ export default function App() {
                   onOpenInfoModal={handleOpenInfoModal}
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
 
                 <ContentRow
@@ -510,6 +618,9 @@ export default function App() {
                   onOpenInfoModal={handleOpenInfoModal}
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
               </div>
             )}
@@ -532,6 +643,9 @@ export default function App() {
                   onOpenInfoModal={handleOpenInfoModal}
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
 
                 <ContentRow
@@ -541,6 +655,9 @@ export default function App() {
                   onOpenInfoModal={handleOpenInfoModal}
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
               </div>
             )}
@@ -563,6 +680,9 @@ export default function App() {
                   onOpenInfoModal={handleOpenInfoModal}
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
 
                 <ContentRow
@@ -572,8 +692,27 @@ export default function App() {
                   onOpenInfoModal={handleOpenInfoModal}
                   myListIds={myListIds}
                   onToggleMyList={handleToggleMyList}
+                  downloadedIds={downloadedIds}
+                  downloadingProgressMap={downloadingProgressMap}
+                  onToggleDownload={handleToggleDownload}
                 />
               </div>
+            )}
+
+            {/* Downloads Tab View */}
+            {activeTab === 'downloads' && (
+              <DownloadsPage
+                downloadedIds={downloadedIds}
+                allMedia={mediaList}
+                onPlayMedia={handlePlayMedia}
+                onOpenInfoModal={handleOpenInfoModal}
+                myListIds={myListIds}
+                onToggleMyList={handleToggleMyList}
+                onRemoveDownload={handleToggleDownload}
+                onClearAllDownloads={handleClearAllDownloads}
+                onBrowseCatalog={() => setActiveTab('home')}
+                downloadingProgressMap={downloadingProgressMap}
+              />
             )}
 
             {/* My List Tab View */}
@@ -689,6 +828,9 @@ export default function App() {
             myListIds={myListIds}
             onToggleMyList={handleToggleMyList}
             allMedia={mediaList}
+            downloadedIds={downloadedIds}
+            downloadingProgress={downloadingProgressMap[selectedMediaItem.id]}
+            onToggleDownload={handleToggleDownload}
           />
         )}
 

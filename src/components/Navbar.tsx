@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Bell, Menu, X, Check, Film, Tv, Sparkles, Bookmark, User, Settings, LogOut, ChevronDown, Shield } from 'lucide-react';
+import { Search, Bell, Menu, X, Check, Film, Tv, Sparkles, Bookmark, User, Settings, LogOut, ChevronDown, Shield, ArrowDownToLine } from 'lucide-react';
 import { ApertureLogo } from './ApertureLogo';
 import { UserProfile, AppNotification } from '../types';
 
@@ -15,6 +15,7 @@ interface NavbarProps {
   profiles: UserProfile[];
   onSelectProfile: (profile: UserProfile) => void;
   myListCount: number;
+  downloadedCount?: number;
   onOpenOnboarding?: () => void;
   onOpenAvatarStudio?: () => void;
   onOpenShortcuts?: () => void;
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   profiles,
   onSelectProfile,
   myListCount,
+  downloadedCount = 0,
   onOpenOnboarding,
   onOpenAvatarStudio,
   onOpenShortcuts,
@@ -68,6 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'series', label: 'Series', icon: Tv },
     { id: 'popular', label: 'New & Popular', icon: Sparkles },
     { id: 'mylist', label: 'My List', icon: Bookmark, badge: myListCount > 0 ? myListCount : undefined },
+    { id: 'downloads', label: 'Downloads', icon: ArrowDownToLine, badge: downloadedCount > 0 ? downloadedCount : undefined },
   ];
 
   return (
@@ -373,6 +376,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                           })}
                         </div>
                       </div>
+                    )}
+
+                    {/* Offline Downloads Link */}
+                    {isLoggedIn && (
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          setActiveTab('downloads');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="w-full px-3.5 py-2 text-xs text-slate-300 font-semibold hover:bg-white/5 rounded-xl flex items-center justify-between transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <ArrowDownToLine className="w-4 h-4 text-[#FFB238]" />
+                          <span>Offline Downloads</span>
+                        </div>
+                        {downloadedCount > 0 && (
+                          <span className="text-[10px] font-mono-meta font-bold px-1.5 py-0.5 rounded-full bg-[#FFB238] text-[#0A0B0F]">
+                            {downloadedCount}
+                          </span>
+                        )}
+                      </button>
                     )}
 
                     {/* Profile/Onboarding Settings */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Plus, Check, Volume2, VolumeX, Pause, Info, Sparkles, Film } from 'lucide-react';
+import { Play, Plus, Check, Volume2, VolumeX, Pause, Info, Sparkles, Film, ArrowDownToLine, CheckCircle2, Loader2 } from 'lucide-react';
 import { HeroSlide, MediaItem } from '../types';
 
 interface HeroCarouselProps {
@@ -10,6 +10,9 @@ interface HeroCarouselProps {
   myListIds: string[];
   onToggleMyList: (mediaId: string) => void;
   allMedia: MediaItem[];
+  downloadedIds?: string[];
+  downloadingProgressMap?: Record<string, number>;
+  onToggleDownload?: (mediaId: string) => void;
 }
 
 export const HeroCarousel: React.FC<HeroCarouselProps> = ({
@@ -19,6 +22,9 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
   myListIds,
   onToggleMyList,
   allMedia,
+  downloadedIds = [],
+  downloadingProgressMap = {},
+  onToggleDownload,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -231,6 +237,41 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
                     </>
                   )}
                 </motion.button>
+
+                {/* Download for Offline Button */}
+                {onToggleDownload && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onToggleDownload(currentSlide.mediaId)}
+                    className={`px-5 py-3.5 rounded-2xl font-semibold text-sm sm:text-base flex items-center gap-2 transition-all relative overflow-hidden ${
+                      downloadingProgressMap[currentSlide.mediaId] !== undefined
+                        ? 'bg-[#FFB238]/30 text-[#FFB238] border border-[#FFB238]/60 shadow-[0_0_20px_rgba(255,178,56,0.3)]'
+                        : downloadedIds.includes(currentSlide.mediaId)
+                        ? 'bg-[#FFB238]/20 text-[#FFB238] border border-[#FFB238]/40 shadow-[0_0_16px_rgba(255,178,56,0.2)]'
+                        : 'bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-md'
+                    }`}
+                  >
+                    {downloadingProgressMap[currentSlide.mediaId] !== undefined ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-[#FFB238]" />
+                        <span className="font-mono-meta font-bold">
+                          Downloading {downloadingProgressMap[currentSlide.mediaId]}%
+                        </span>
+                      </>
+                    ) : downloadedIds.includes(currentSlide.mediaId) ? (
+                      <>
+                        <CheckCircle2 className="w-5 h-5 text-[#FFB238]" />
+                        <span>Downloaded</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDownToLine className="w-5 h-5" />
+                        <span>Download</span>
+                      </>
+                    )}
+                  </motion.button>
+                )}
 
                 {/* Info Button */}
                 <motion.button

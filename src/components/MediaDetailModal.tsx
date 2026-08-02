@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Play, Plus, Check, Volume2, VolumeX, RotateCcw, Maximize, Sparkles, Film, Tv, Clock, Star, ThumbsUp } from 'lucide-react';
+import { X, Play, Plus, Check, Volume2, VolumeX, RotateCcw, Maximize, Sparkles, Film, Tv, Clock, Star, ThumbsUp, ArrowDownToLine, CheckCircle2, Loader2 } from 'lucide-react';
 import { MediaItem } from '../types';
 
 interface MediaDetailModalProps {
@@ -10,6 +10,9 @@ interface MediaDetailModalProps {
   myListIds: string[];
   onToggleMyList: (mediaId: string) => void;
   allMedia: MediaItem[];
+  downloadedIds?: string[];
+  downloadingProgress?: number;
+  onToggleDownload?: (mediaId: string) => void;
 }
 
 export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
@@ -19,6 +22,9 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
   myListIds,
   onToggleMyList,
   allMedia,
+  downloadedIds = [],
+  downloadingProgress,
+  onToggleDownload,
 }) => {
   const [selectedSeasonIndex, setSelectedSeasonIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -167,6 +173,43 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
                   {isSavedInList ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   <span className="text-xs hidden sm:inline">{isSavedInList ? 'In My List' : 'My List'}</span>
                 </button>
+
+                {/* Download for Offline Button */}
+                {onToggleDownload && (
+                  <button
+                    onClick={() => onToggleDownload(mediaItem.id)}
+                    className={`p-3 rounded-xl border backdrop-blur-md transition-all flex items-center gap-2 relative overflow-hidden ${
+                      downloadingProgress !== undefined
+                        ? 'bg-[#FFB238]/30 text-[#FFB238] border-[#FFB238]/60 shadow-[0_0_15px_rgba(255,178,56,0.3)]'
+                        : downloadedIds.includes(mediaItem.id)
+                        ? 'bg-[#FFB238]/20 text-[#FFB238] border-[#FFB238]/40 font-semibold'
+                        : 'bg-black/60 border-white/20 text-white hover:bg-white/20'
+                    }`}
+                  >
+                    {downloadingProgress !== undefined ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-[#FFB238]" />
+                        <span className="text-xs font-mono-meta font-bold">
+                          Downloading {downloadingProgress}%
+                        </span>
+                        <div
+                          className="absolute bottom-0 left-0 h-1 bg-[#FFB238] transition-all duration-200"
+                          style={{ width: `${downloadingProgress}%` }}
+                        />
+                      </>
+                    ) : downloadedIds.includes(mediaItem.id) ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-[#FFB238]" />
+                        <span className="text-xs font-semibold">Downloaded</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDownToLine className="w-4 h-4 text-slate-300" />
+                        <span className="text-xs hidden sm:inline">Download</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 <button
                   onClick={() => setIsLiked(!isLiked)}

@@ -210,6 +210,21 @@ export async function updateUserAvatarInFirestore(uid: string, avatarUrl: string
 }
 
 /**
+  * Save downloaded title IDs to Firestore under user document.
+  */
+export async function saveUserDownloadsToFirestore(uid: string, downloadIds: string[]) {
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    await setDoc(userDocRef, {
+      downloads: downloadIds,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore update downloads notice:', err);
+  }
+}
+
+/**
   * Subscribe to a specific user's Firestore document.
   */
 export function subscribeToUserProfileDoc(uid: string, onUpdate: (data: any) => void) {
