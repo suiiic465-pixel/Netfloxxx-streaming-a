@@ -29,22 +29,34 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Outer Card Wrapper with scale and lift */}
+      {/* Outer Card Wrapper with smooth scale, depth lift, and subtle glow shadow transition */}
       <motion.div
+        initial={false}
         animate={{
-          scale: isHovered ? 1.05 : 1,
-          y: isHovered ? -6 : 0,
+          scale: isHovered ? 1.06 : 1,
+          y: isHovered ? -8 : 0,
+          boxShadow: isHovered
+            ? '0 20px 35px -10px rgba(0, 0, 0, 0.85), 0 0 25px rgba(255, 178, 56, 0.28), 0 0 2px rgba(255, 178, 56, 0.5)'
+            : '0 4px 12px rgba(0, 0, 0, 0.35), 0 0 0px rgba(0, 0, 0, 0)',
+          borderColor: isHovered ? 'rgba(255, 178, 56, 0.45)' : 'rgba(255, 255, 255, 0.1)',
         }}
-        transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className="relative bg-[#12141C] rounded-2xl overflow-hidden border border-white/10 shadow-lg card-glow transition-all"
+        transition={{
+          type: 'spring',
+          stiffness: 350,
+          damping: 24,
+          mass: 0.8,
+        }}
+        className="relative bg-[#12141C] rounded-2xl overflow-hidden border transition-colors"
       >
         {/* Poster Image Container */}
         <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full overflow-hidden bg-slate-900">
-          <img
+          <motion.img
             src={item.backdropUrl || item.posterUrl}
             alt={item.title}
             referrerPolicy="no-referrer"
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+            animate={{ scale: isHovered ? 1.1 : 1 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full h-full object-cover"
           />
 
           {/* Top Badges */}
@@ -74,15 +86,20 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <AnimatePresence>
             {isHovered && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.6 }}
+                initial={{ opacity: 0, scale: 0.5 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.6 }}
+                exit={{ opacity: 0, scale: 0.5 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                 onClick={() => onPlayMedia(item.id)}
                 className="absolute inset-0 flex items-center justify-center z-20"
               >
-                <div className="w-12 h-12 rounded-full bg-[#FFB238] text-[#0A0B0F] flex items-center justify-center shadow-[0_0_20px_rgba(255,178,56,0.6)] hover:scale-110 transition-transform">
+                <motion.div
+                  whileHover={{ scale: 1.12 }}
+                  whileTap={{ scale: 0.92 }}
+                  className="w-12 h-12 rounded-full bg-[#FFB238] text-[#0A0B0F] flex items-center justify-center shadow-[0_0_25px_rgba(255,178,56,0.7)]"
+                >
                   <Play className="w-6 h-6 fill-current ml-0.5" />
-                </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -126,7 +143,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           {/* Hover Action Bar */}
           <div className="pt-1 flex items-center justify-between border-t border-white/5">
             <div className="flex items-center gap-1.5">
-              <button
+              <motion.button
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onPlayMedia(item.id);
@@ -135,9 +154,11 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 title="Play Now"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleMyList(item.id);
@@ -150,9 +171,11 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 title={isSavedInList ? 'Remove from My List' : 'Add to My List'}
               >
                 {isSavedInList ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsLiked(!isLiked);
@@ -165,10 +188,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 title={isLiked ? 'Liked' : 'Like'}
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
-              </button>
+              </motion.button>
             </div>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenInfoModal(item.id);
@@ -177,7 +202,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               title="More Info"
             >
               <Info className="w-3.5 h-3.5" />
-            </button>
+            </motion.button>
           </div>
         </div>
       </motion.div>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Plus, Check, Volume2, VolumeX, Pause, Info, Sparkles } from 'lucide-react';
+import { Play, Plus, Check, Volume2, VolumeX, Pause, Info, Sparkles, Film } from 'lucide-react';
 import { HeroSlide, MediaItem } from '../types';
 
 interface HeroCarouselProps {
@@ -24,20 +24,63 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
 
-  // Auto slide every 6s
-  useEffect(() => {
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % slides.length);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [isPlaying, slides.length]);
+  // Inactivity & Trailer Preview State
+  const [showTrailerPreview, setShowTrailerPreview] = useState(false);
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentSlide = slides[currentIndex];
   const isSavedInList = myListIds.includes(currentSlide.mediaId);
 
+  // Fallback trailer video url if slide doesn't define one
+  const trailerUrl =
+    currentSlide.trailerVideoUrl ||
+    allMedia.find((m) => m.id === currentSlide.mediaId)?.trailerVideoUrl ||
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4';
+
+  // Reset inactivity countdown (3 seconds)
+  const resetInactivityTimer = () => {
+    setShowTrailerPreview(false);
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    inactivityTimerRef.current = setTimeout(() => {
+      setShowTrailerPreview(true);
+    }, 3000);
+  };
+
+  // Trigger timer whenever slide index changes
+  useEffect(() => {
+    resetInactivityTimer();
+    return () => {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [currentIndex]);
+
+  // Handle user mouse movement over carousel
+  const handleUserActivity = () => {
+    // If trailer hasn't started playing yet, delay/reset timer
+    if (!showTrailerPreview) {
+      resetInactivityTimer();
+    }
+  };
+
+  // Auto slide interval (6s for backdrop image, extended to 12s when trailer is active)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const duration = showTrailerPreview ? 12000 : 6000;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % slides.length);
+    }, duration);
+    return () => clearInterval(interval);
+  }, [isPlaying, slides.length, showTrailerPreview]);
+
   return (
-    <section className="relative w-full min-h-[90vh] md:min-h-screen flex items-end justify-start overflow-hidden pt-24 pb-16 lg:pb-24">
+    <section
+      onMouseMove={handleUserActivity}
+      className="relative w-full min-h-[90vh] md:min-h-screen flex items-end justify-start overflow-hidden pt-24 pb-16 lg:pb-24"
+    >
       {/* Background Image & Video Crossfade Carousel */}
       <div className="absolute inset-0 z-0">
         <AnimatePresence mode="wait">
@@ -49,15 +92,38 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
             className="absolute inset-0 w-full h-full"
           >
+            {/* Backdrop Image */}
             <img
               src={currentSlide.backdropUrl}
               alt={currentSlide.title}
               referrerPolicy="no-referrer"
-              className="w-full h-full object-cover object-center filter brightness-[0.85]"
+              className={`w-full h-full object-cover object-center filter brightness-[0.85] transition-opacity duration-1000 ${
+                showTrailerPreview ? 'opacity-0' : 'opacity-100'
+              }`}
             />
 
+            {/* Auto Muted Trailer Preview Video */}
+            {showTrailerPreview && trailerUrl && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1 }}
+                className="absolute inset-0 w-full h-full"
+              >
+                <video
+                  src={trailerUrl}
+                  autoPlay
+                  muted={isMuted}
+                  loop
+                  playsInline
+                  className="w-full h-full object-cover object-center filter brightness-[0.80]"
+                />
+              </motion.div>
+            )}
+
             {/* Vignette Gradients for cinematic readability */}
-            <div className="absolute inset-0 hero-vignette" />
+            <div className="absolute inset-0 hero-vignette pointer-events-none" />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -74,15 +140,27 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               className="space-y-4 sm:space-y-5"
             >
-              {/* Badge & Subtitle */}
+              {/* Badge, Subtitle & Trailer Indicator */}
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="px-3 py-1 rounded-full text-xs font-mono-meta font-bold bg-gradient-to-r from-[#FFB238] to-[#FFC870] text-[#0A0B0F] shadow-[0_0_15px_rgba(255,178,56,0.4)] flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" />
                   {currentSlide.subtitle}
                 </span>
-                <span className="text-xs font-mono-meta text-[#2AC9B0] bg-[#2AC9B0]/10 border border-[#2AC9B0]/30 px-2.5 py-0.5 rounded-full">
-                  {currentSlide.audioFormat}
-                </span>
+
+                {showTrailerPreview ? (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="px-2.5 py-0.5 rounded-full bg-[#2AC9B0]/20 border border-[#2AC9B0]/50 text-[#2AC9B0] text-xs font-mono-meta font-bold flex items-center gap-1.5 animate-pulse shadow-[0_0_15px_rgba(42,201,176,0.3)]"
+                  >
+                    <Film className="w-3.5 h-3.5 text-[#2AC9B0]" />
+                    <span>Trailer Previewing</span>
+                  </motion.span>
+                ) : (
+                  <span className="text-xs font-mono-meta text-[#2AC9B0] bg-[#2AC9B0]/10 border border-[#2AC9B0]/30 px-2.5 py-0.5 rounded-full">
+                    {currentSlide.audioFormat}
+                  </span>
+                )}
               </div>
 
               {/* Title in Condensed Display Typography */}
@@ -127,7 +205,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
                   className="px-6 py-3.5 rounded-2xl bg-[#FFB238] text-[#0A0B0F] font-bold text-sm sm:text-base flex items-center gap-2.5 shadow-[0_0_24px_rgba(255,178,56,0.5)] hover:bg-[#FFC870] transition-colors focus:outline-none"
                 >
                   <Play className="w-5 h-5 fill-current" />
-                  <span>Play Trailer</span>
+                  <span>Play Full Stream</span>
                 </motion.button>
 
                 {/* + My List Toggle Button */}
@@ -178,7 +256,10 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
               return (
                 <button
                   key={slide.id}
-                  onClick={() => setCurrentIndex(idx)}
+                  onClick={() => {
+                    setCurrentIndex(idx);
+                    setShowTrailerPreview(false);
+                  }}
                   className={`group relative py-2 focus:outline-none`}
                   title={`Go to slide ${idx + 1}: ${slide.title}`}
                 >
@@ -194,7 +275,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
                         className="h-full bg-white/40"
                         initial={{ width: '0%' }}
                         animate={{ width: '100%' }}
-                        transition={{ duration: 6, ease: 'linear' }}
+                        transition={{ duration: showTrailerPreview ? 12 : 6, ease: 'linear' }}
                       />
                     )}
                   </div>
@@ -214,10 +295,20 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
             </button>
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className="p-2 rounded-full bg-black/40 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-              title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+              className="p-2.5 rounded-full bg-black/60 border border-white/15 text-slate-300 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-1.5"
+              title={isMuted ? 'Unmute Trailer Audio' : 'Mute Trailer Audio'}
             >
-              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              {isMuted ? (
+                <>
+                  <VolumeX className="w-4 h-4 text-slate-400" />
+                  <span className="text-[10px] font-mono-meta hidden sm:inline text-slate-400">Muted</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="w-4 h-4 text-[#2AC9B0]" />
+                  <span className="text-[10px] font-mono-meta hidden sm:inline text-[#2AC9B0] font-bold">Unmuted</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -225,3 +316,4 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({
     </section>
   );
 };
+

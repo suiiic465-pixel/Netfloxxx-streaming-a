@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "titles": {
+      "title": "Titles",
+      "description": "Video titles and movies uploaded to Watch PY",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "genres": { "type": "array", "items": { "type": "string" } },
+        "genre": { "type": "string" },
+        "year": { "type": "number" },
+        "duration": { "type": "string" },
+        "rating": { "type": "string" },
+        "type": { "type": "string" },
+        "posterUrl": { "type": "string" },
+        "trailerVideoUrl": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "matchScore": { "type": "number" },
+        "isTrending": { "type": "boolean" },
+        "isNewRelease": { "type": "boolean" }
+      },
+      "required": ["title", "description", "genre", "year", "duration", "rating", "posterUrl", "trailerVideoUrl"]
+    }
+  }
+}

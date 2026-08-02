@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Bell, Menu, X, Check, Film, Tv, Sparkles, Bookmark, User, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { Search, Bell, Menu, X, Check, Film, Tv, Sparkles, Bookmark, User, Settings, LogOut, ChevronDown, Shield, Keyboard } from 'lucide-react';
 import { ApertureLogo } from './ApertureLogo';
 import { UserProfile, AppNotification } from '../types';
 
@@ -16,6 +16,13 @@ interface NavbarProps {
   onSelectProfile: (profile: UserProfile) => void;
   myListCount: number;
   onOpenOnboarding?: () => void;
+  onOpenAvatarStudio?: () => void;
+  onOpenShortcuts?: () => void;
+  onOpenAdmin?: () => void;
+  isLoggedIn?: boolean;
+  userEmail?: string | null;
+  onOpenAuth?: (mode: 'login' | 'signup') => void;
+  onSignOut?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,6 +37,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectProfile,
   myListCount,
   onOpenOnboarding,
+  onOpenAvatarStudio,
+  onOpenShortcuts,
+  onOpenAdmin,
+  isLoggedIn = false,
+  userEmail,
+  onOpenAuth,
+  onSignOut,
 }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -111,11 +125,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Section: Search, Notifications, Profile */}
         <div className="flex items-center gap-3 sm:gap-4">
+          {/* Admin Studio Trigger Button */}
+          {onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              className="px-3 py-1.5 rounded-full bg-[#FFB238]/15 hover:bg-[#FFB238]/25 border border-[#FFB238]/40 text-[#FFB238] font-mono-meta text-xs font-bold flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(255,178,56,0.2)] focus:outline-none"
+              title="Open Watch PY Admin Studio"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Admin Studio</span>
+            </button>
+          )}
+
           {/* Search Trigger Button */}
           <button
             onClick={onOpenSearch}
             className="p-2.5 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors relative group focus:outline-none focus:ring-2 focus:ring-[#FFB238]/50"
-            title="Search Movies & Series (Ctrl + K)"
+            title="Search Movies & Series (S or Ctrl + K)"
             aria-label="Search"
           >
             <Search className="w-5 h-5 group-hover:scale-110 transition-transform text-[#FFB238]" />
@@ -123,6 +149,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               ⌘K
             </span>
           </button>
+
+          {/* Keyboard Shortcuts Guide Trigger */}
+          {onOpenShortcuts && (
+            <button
+              onClick={onOpenShortcuts}
+              className="p-2.5 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors relative group focus:outline-none focus:ring-2 focus:ring-[#2AC9B0]/50"
+              title="Keyboard Shortcuts Guide (?)"
+              aria-label="Keyboard Shortcuts"
+            >
+              <Keyboard className="w-5 h-5 text-[#2AC9B0] group-hover:scale-110 transition-transform" />
+            </button>
+          )}
 
           {/* Notifications Toggle */}
           <div className="relative">
@@ -218,109 +256,168 @@ export const Navbar: React.FC<NavbarProps> = ({
             </AnimatePresence>
           </div>
 
-          {/* Profile Menu Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowProfileMenu(!showProfileMenu);
-                setShowNotifications(false);
-              }}
-              className="flex items-center gap-2 p-1 rounded-full hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[#FFB238]/50"
-            >
-              <div className="relative">
-                <img
-                  src={currentProfile.avatar}
-                  alt={currentProfile.name}
-                  referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-full object-cover ring-2 ring-[#FFB238]/60 shadow-lg"
-                />
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#2AC9B0] rounded-full ring-2 ring-[#0A0B0F]" />
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
-            </button>
+          {/* Auth Buttons or Profile Menu Dropdown */}
+          {!isLoggedIn && onOpenAuth ? (
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => onOpenAuth('login')}
+                className="px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => onOpenAuth('signup')}
+                className="px-4 py-1.5 rounded-full bg-[#FFB238] hover:bg-[#ffa312] text-[#0A0B0F] font-bold text-xs shadow-[0_0_15px_rgba(255,178,56,0.25)] transition-all transform hover:scale-[1.02]"
+              >
+                Sign Up
+              </button>
+            </div>
+          ) : (
+            /* Profile Menu Dropdown */
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowProfileMenu(!showProfileMenu);
+                  setShowNotifications(false);
+                }}
+                className="flex items-center gap-2 p-1 rounded-full hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[#FFB238]/50"
+              >
+                <div className="relative">
+                  <img
+                    src={currentProfile.avatar}
+                    alt={currentProfile.name}
+                    referrerPolicy="no-referrer"
+                    className="w-9 h-9 rounded-full object-cover ring-2 ring-[#FFB238]/60 shadow-lg"
+                  />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#2AC9B0] rounded-full ring-2 ring-[#0A0B0F]" />
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+              </button>
 
-            {/* Profile Switcher Menu */}
-            <AnimatePresence>
-              {showProfileMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 12, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-3 w-64 glass-panel rounded-2xl shadow-2xl p-2 z-50 border border-white/10"
-                >
-                  <div className="p-3 border-b border-white/10 mb-1">
-                    <p className="text-xs text-slate-400">Signed in as</p>
-                    <p className="font-semibold text-sm text-white truncate">{currentProfile.name}</p>
-                  </div>
+              {/* Profile Switcher Menu */}
+              <AnimatePresence>
+                {showProfileMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-3 w-64 glass-panel rounded-2xl shadow-2xl p-2 z-50 border border-white/10"
+                  >
+                    <div className="p-3 border-b border-white/10 mb-1">
+                      <p className="text-xs text-slate-400">Signed in as</p>
+                      <p className="font-semibold text-sm text-white truncate">{userEmail || currentProfile.name}</p>
+                    </div>
 
-                  <p className="px-3 py-1 text-[11px] font-mono-meta text-[#FFB238] uppercase tracking-wider font-semibold">
-                    Switch Profile
-                  </p>
+                    <p className="px-3 py-1 text-[11px] font-mono-meta text-[#FFB238] uppercase tracking-wider font-semibold">
+                      Switch Profile
+                    </p>
 
-                  <div className="space-y-1 mb-2">
-                    {profiles.map((p) => {
-                      const isSelected = p.id === currentProfile.id;
-                      return (
+                    <div className="space-y-1 mb-2">
+                      {profiles.map((p) => {
+                        const isSelected = p.id === currentProfile.id;
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => {
+                              onSelectProfile(p);
+                              setShowProfileMenu(false);
+                            }}
+                            className={`w-full p-2 rounded-xl text-left flex items-center justify-between text-xs transition-colors ${
+                              isSelected
+                                ? 'bg-[#FFB238]/15 text-[#FFB238] font-semibold'
+                                : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={p.avatar}
+                                alt=""
+                                referrerPolicy="no-referrer"
+                                className="w-7 h-7 rounded-full object-cover"
+                              />
+                              <span>{p.name}</span>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-[#FFB238]" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-2 border-t border-white/10 space-y-1">
+                      {onOpenAvatarStudio && (
                         <button
-                          key={p.id}
                           onClick={() => {
-                            onSelectProfile(p);
                             setShowProfileMenu(false);
+                            onOpenAvatarStudio();
                           }}
-                          className={`w-full p-2 rounded-xl text-left flex items-center justify-between text-xs transition-colors ${
-                            isSelected
-                              ? 'bg-[#FFB238]/15 text-[#FFB238] font-semibold'
-                              : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                          }`}
+                          className="w-full px-3 py-2 text-xs text-[#2AC9B0] font-bold hover:bg-[#2AC9B0]/10 rounded-xl flex items-center gap-2 transition-colors"
                         >
-                          <div className="flex items-center gap-2.5">
-                            <img
-                              src={p.avatar}
-                              alt=""
-                              referrerPolicy="no-referrer"
-                              className="w-7 h-7 rounded-full object-cover"
-                            />
-                            <span>{p.name}</span>
-                          </div>
-                          {isSelected && <Check className="w-4 h-4 text-[#FFB238]" />}
+                          <Sparkles className="w-4 h-4 text-[#2AC9B0]" />
+                          Cinematic Avatar Studio
                         </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="pt-2 border-t border-white/10 space-y-1">
-                    {onOpenOnboarding && (
+                      )}
+                      {onOpenShortcuts && (
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            onOpenShortcuts();
+                          }}
+                          className="w-full px-3 py-2 text-xs text-[#2AC9B0] font-bold hover:bg-[#2AC9B0]/10 rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <Keyboard className="w-4 h-4 text-[#2AC9B0]" />
+                          Keyboard Shortcuts Guide
+                        </button>
+                      )}
+                      {onOpenAdmin && (
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            onOpenAdmin();
+                          }}
+                          className="w-full px-3 py-2 text-xs text-[#FFB238] font-bold hover:bg-[#FFB238]/10 rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <Shield className="w-4 h-4 text-[#FFB238]" />
+                          Admin Panel Studio
+                        </button>
+                      )}
+                      {onOpenOnboarding && (
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            onOpenOnboarding();
+                          }}
+                          className="w-full px-3 py-2 text-xs text-slate-300 font-bold hover:bg-white/5 rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <User className="w-4 h-4 text-slate-400" />
+                          Edit Profile & Avatar
+                        </button>
+                      )}
                       <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          onOpenOnboarding();
-                        }}
-                        className="w-full px-3 py-2 text-xs text-[#FFB238] font-bold hover:bg-[#FFB238]/10 rounded-xl flex items-center gap-2 transition-colors"
+                        onClick={() => setShowProfileMenu(false)}
+                        className="w-full px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-xl flex items-center gap-2 transition-colors"
                       >
-                        <User className="w-4 h-4 text-[#FFB238]" />
-                        Edit Profile & Avatar
+                        <Settings className="w-4 h-4 text-slate-400" />
+                        Stream Preferences
                       </button>
-                    )}
-                    <button
-                      onClick={() => setShowProfileMenu(false)}
-                      className="w-full px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 rounded-xl flex items-center gap-2 transition-colors"
-                    >
-                      <Settings className="w-4 h-4 text-slate-400" />
-                      Stream Preferences
-                    </button>
-                    <button
-                      onClick={() => setShowProfileMenu(false)}
-                      className="w-full px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 rounded-xl flex items-center gap-2 transition-colors"
-                    >
-                      <LogOut className="w-4 h-4 text-rose-400" />
-                      Sign Out
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                      {onSignOut && (
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            onSignOut();
+                          }}
+                          className="w-full px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-400" />
+                          Sign Out
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
 
           {/* Mobile Menu Hamburger Toggle */}
           <button

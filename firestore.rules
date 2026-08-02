@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Anyone can read and manage video titles collection for Watch PY Admin
+    match /titles/{titleId} {
+      allow read, write, delete: if true;
+    }
+    
+    // Default fallback for other collections
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

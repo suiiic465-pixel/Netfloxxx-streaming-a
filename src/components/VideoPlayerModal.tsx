@@ -42,7 +42,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [quality, setQuality] = useState('4K Ultra HD');
+  const [quality, setQuality] = useState('Auto');
+  const [qualityToast, setQualityToast] = useState<string | null>(null);
 
   // Controls UI visibility
   const [showControls, setShowControls] = useState(true);
@@ -50,6 +51,13 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   // Settings Menu Open
   const [showSettings, setShowSettings] = useState(false);
+
+  // Quality Handler
+  const handleQualitySelect = (qKey: string, desc: string) => {
+    setQuality(qKey);
+    setQualityToast(`Streaming quality set to ${desc}`);
+    setTimeout(() => setQualityToast(null), 2600);
+  };
   const [activeSettingsTab, setActiveSettingsTab] = useState<'main' | 'speed' | 'quality'>('main');
 
   // Animated burst overlays for Youtube-style double-click rewind/forward
@@ -310,6 +318,22 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           className="w-full h-full object-contain cursor-pointer"
         />
 
+        {/* Ambient Subtle Animated Glow Progress Indicator (Always visible at screen bottom during playback) */}
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-10 pointer-events-none overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-[#FFB238] via-[#FFC870] to-[#2AC9B0] relative transition-[width] duration-150 ease-linear shadow-[0_-2px_14px_rgba(255,178,56,0.85)]"
+            style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+          >
+            {isPlaying && (
+              <motion.div
+                animate={{ x: ['-100%', '250%'] }}
+                transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/80 to-transparent w-1/3 opacity-70"
+              />
+            )}
+          </div>
+        </div>
+
         {/* Animated YouTube-Style -10s / +10s Burst Overlays */}
         <AnimatePresence>
           {burstAnim && (
@@ -333,6 +357,21 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   <span className="font-mono-meta font-extrabold text-sm text-white">+10 sec</span>
                 </>
               )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Quality Toast Banner */}
+        <AnimatePresence>
+          {qualityToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              className="absolute top-20 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-2xl glass-panel border border-[#2AC9B0]/40 bg-black/80 text-[#2AC9B0] text-xs font-mono-meta font-bold flex items-center gap-2 shadow-[0_0_30px_rgba(42,201,176,0.3)] pointer-events-none"
+            >
+              <Sparkles className="w-4 h-4 text-[#2AC9B0] animate-pulse" />
+              <span>{qualityToast}</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -463,31 +502,54 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               )}
 
               {activeSettingsTab === 'quality' && (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <button
                     onClick={() => setActiveSettingsTab('main')}
                     className="text-[11px] text-slate-400 hover:text-white mb-2 flex items-center gap-1"
                   >
                     ← Back
                   </button>
-                  <p className="text-xs font-bold text-white mb-2">Video Quality</p>
-                  {['Auto 4K', '1080p Full HD', '720p HD', '480p SD', '360p Mobile'].map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => {
-                        setQuality(q.split(' ')[0]);
-                        setShowSettings(false);
-                      }}
-                      className={`w-full p-2 rounded-xl text-left text-xs font-mono-meta flex items-center justify-between ${
-                        quality.startsWith(q.split(' ')[0])
-                          ? 'bg-[#2AC9B0]/20 text-[#2AC9B0] font-bold'
-                          : 'text-slate-300 hover:bg-white/5'
-                      }`}
-                    >
-                      <span>{q}</span>
-                      {quality.startsWith(q.split(' ')[0]) && <Check className="w-4 h-4" />}
-                    </button>
-                  ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-white">Stream Quality Selector</p>
+                    <span className="text-[10px] font-mono-meta text-[#2AC9B0] bg-[#2AC9B0]/10 px-2 py-0.5 rounded-full">
+                      Adaptive Bitrate
+                    </span>
+                  </div>
+
+                  {[
+                    { key: 'Auto', label: 'Auto (Adaptive)', desc: 'Auto-adjusts based on internet speed', badge: 'Recommended' },
+                    { key: '1080p', label: '1080p Full HD', desc: 'Crisp HD streaming • 15 Mbps', badge: 'High Speed' },
+                    { key: '4K', label: '4K Ultra HD', desc: 'Maximum clarity • 25+ Mbps', badge: 'Ultra Bandwidth' },
+                    { key: '720p', label: '720p HD', desc: 'Balanced HD streaming • 5 Mbps', badge: 'Data Saver' }
+                  ].map((item) => {
+                    const isSelected = quality === item.key || quality.startsWith(item.key);
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => {
+                          handleQualitySelect(item.key, item.label);
+                          setShowSettings(false);
+                        }}
+                        className={`w-full p-2.5 rounded-xl text-left text-xs transition-all ${
+                          isSelected
+                            ? 'bg-[#2AC9B0]/20 border border-[#2AC9B0]/50 text-[#2AC9B0] font-bold shadow-[0_0_15px_rgba(42,201,176,0.2)]'
+                            : 'text-slate-300 hover:bg-white/5 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-white">{item.label}</span>
+                          {isSelected ? (
+                            <Check className="w-4 h-4 text-[#2AC9B0]" />
+                          ) : (
+                            <span className="text-[9px] font-mono-meta px-1.5 py-0.5 rounded bg-white/5 text-slate-400">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-mono-meta mt-0.5">{item.desc}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
@@ -612,6 +674,19 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   <span className="hidden lg:inline-block text-[11px] font-mono-meta text-slate-400">
                     Keyboard: Space (Play/Pause) • ← → (Seek) • F (Full)
                   </span>
+
+                  {/* Quick Quality Selector Button */}
+                  <button
+                    onClick={() => {
+                      setShowSettings(true);
+                      setActiveSettingsTab('quality');
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-[#2AC9B0]/20 hover:border-[#2AC9B0]/50 border border-white/15 text-xs font-mono-meta font-bold text-slate-200 transition-colors"
+                    title="Adjust Streaming Quality (Auto / 1080p / 4K)"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-[#2AC9B0]" />
+                    <span>{quality === 'Auto' ? 'AUTO' : quality}</span>
+                  </button>
 
                   <button
                     onClick={toggleFullscreen}

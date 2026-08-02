@@ -6,18 +6,125 @@ import { ContentRow } from './components/ContentRow';
 import { MediaDetailModal } from './components/MediaDetailModal';
 import { SearchOverlay } from './components/SearchOverlay';
 import { PageLoadSplash } from './components/PageLoadSplash';
-import { OnboardingModal } from './components/OnboardingModal';
+import { AuthModal } from './components/AuthModal';
+import { AvatarSelectorModal } from './components/AvatarSelectorModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SkeletonRow } from './components/SkeletonRow';
 import { Footer } from './components/Footer';
+import { AdminPanel } from './components/AdminPanel';
+import { subscribeToTitles, subscribeToAuthState, logoutAdminUser, subscribeToUserProfileDoc } from './lib/firebaseService';
 import { HERO_SLIDES, ALL_MEDIA, USER_PROFILES, INITIAL_NOTIFICATIONS } from './data/mockData';
 import { MediaItem, UserProfile, AppNotification } from './types';
-import { Bookmark, Sparkles, Film, Tv, Play, Trash2, UserCheck } from 'lucide-react';
+import { Bookmark, Sparkles, Film, Tv, Play, Trash2, Shield, User, LockKeyhole } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
   const [isSplashFinished, setIsSplashFinished] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+
+  // Auth & Modal State
+  const [authUser, setAuthUser] = useState<any>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
+  const [authInterceptMessage, setAuthInterceptMessage] = useState<string | null>(null);
+  const [isAvatarStudioOpen, setIsAvatarStudioOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToAuthState((user) => {
+      setAuthUser(user);
+    });
+    return () => unsub();
+  }, []);
+
+  // Global Keyboard Navigation Shortcuts Handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElem = document.activeElement;
+      const isTyping =
+        activeElem &&
+        (activeElem.tagName === 'INPUT' ||
+          activeElem.tagName === 'TEXTAREA' ||
+          (activeElem as HTMLElement).isContentEditable);
+
+      // Escape always closes overlays
+      if (e.key === 'Escape') {
+        setIsSearchOpen(false);
+        setIsShortcutsOpen(false);
+        setSelectedMediaId(null);
+        setPlayingMediaId(null);
+        setIsAdminOpen(false);
+        setIsAvatarStudioOpen(false);
+        setIsAuthOpen(false);
+        return;
+      }
+
+      if (isTyping) return;
+
+      // Ctrl+K or Cmd+K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if (key === 'h') {
+        e.preventDefault();
+        setActiveTab('home');
+        showToast('Navigated to Home (H)');
+      } else if (key === 'm') {
+        e.preventDefault();
+        setActiveTab('mylist');
+        showToast('Navigated to My List (M)');
+      } else if (key === 'f') {
+        e.preventDefault();
+        setActiveTab('movies');
+        showToast('Navigated to Movies (F)');
+      } else if (key === 't') {
+        e.preventDefault();
+        setActiveTab('tv');
+        showToast('Navigated to TV Shows (T)');
+      } else if (key === 's' || key === '/') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      } else if (key === '?') {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+      } else if (key === 'a') {
+        e.preventDefault();
+        setIsAvatarStudioOpen(true);
+      } else if (key === 'p') {
+        e.preventDefault();
+        if (HERO_SLIDES.length > 0) {
+          handlePlayMedia(HERO_SLIDES[0].mediaId);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [authUser]);
+
+  // Listen to Firestore User Profile updates (Avatar & Display Name)
+  useEffect(() => {
+    if (!authUser?.uid) return;
+    const unsubProfile = subscribeToUserProfileDoc(authUser.uid, (data) => {
+      if (data) {
+        if (data.avatar || data.displayName) {
+          setCurrentProfile((prev) => ({
+            ...prev,
+            avatar: data.avatar || prev.avatar,
+            name: data.displayName || prev.name,
+          }));
+        }
+      }
+    });
+    return () => unsubProfile();
+  }, [authUser]);
 
   // Selected media for Info Detail Modal
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
@@ -25,37 +132,37 @@ export default function App() {
   // Selected media for Full Custom Cinema Video Player
   const [playingMediaId, setPlayingMediaId] = useState<string | null>(null);
 
-  // Dynamic Media state to preserve play progress
+  // Dynamic Media state to preserve play progress and integrate real-time Firestore titles
   const [mediaList, setMediaList] = useState<MediaItem[]>(ALL_MEDIA);
 
-  // Onboarding state
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const [currentProfile, setCurrentProfile] = useState<UserProfile>(() => {
-    try {
-      const saved = localStorage.getItem('watchpy_user_profile');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return USER_PROFILES[0];
-  });
+  const [currentProfile, setCurrentProfile] = useState<UserProfile>(USER_PROFILES[0]);
 
   // Tab switching loading skeleton simulator
   const [isTabLoading, setIsTabLoading] = useState(false);
 
-  // Check on mount if first time user
+  // Subscribe to real-time Firestore 'titles' collection
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('watchpy_user_profile');
-      if (!saved) {
-        // Open onboarding on first visit
-        setIsOnboardingOpen(true);
+    const unsubscribe = subscribeToTitles((firestoreTitles) => {
+      if (firestoreTitles && firestoreTitles.length > 0) {
+        // Prepend Firestore titles to catalog so newly uploaded videos immediately appear
+        const firestoreIds = new Set(firestoreTitles.map((t) => t.id));
+        const defaultMediaFiltered = ALL_MEDIA.filter((m) => !firestoreIds.has(m.id));
+        setMediaList([...firestoreTitles, ...defaultMediaFiltered]);
       }
-    } catch (e) {
-      setIsOnboardingOpen(true);
-    }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Route listener for /admin or #admin URL access
+  useEffect(() => {
+    const checkAdminRoute = () => {
+      if (window.location.hash === '#admin' || window.location.pathname === '/admin') {
+        setIsAdminOpen(true);
+      }
+    };
+    checkAdminRoute();
+    window.addEventListener('hashchange', checkAdminRoute);
+    return () => window.removeEventListener('hashchange', checkAdminRoute);
   }, []);
 
   // Persistent My List State
@@ -108,24 +215,33 @@ export default function App() {
     );
   };
 
+  const handleOpenAuth = (mode: 'login' | 'signup', msg?: string) => {
+    setAuthInterceptMessage(msg || null);
+    setAuthMode(mode);
+    setIsAuthOpen(true);
+  };
+
   const handlePlayMedia = (mediaId: string) => {
+    if (!authUser) {
+      handleOpenAuth('signup', 'Create an account to stream movies and series on Watch PY.');
+      return;
+    }
     setSelectedMediaId(null);
     setPlayingMediaId(mediaId);
   };
 
   const handleOpenInfoModal = (mediaId: string) => {
+    if (!authUser) {
+      handleOpenAuth('signup', 'Create a free account to preview Watch PY titles.');
+      return;
+    }
     setSelectedMediaId(mediaId);
   };
 
-  const handleOnboardingComplete = (profile: UserProfile) => {
-    setCurrentProfile(profile);
-    try {
-      localStorage.setItem('watchpy_user_profile', JSON.stringify(profile));
-    } catch (e) {
-      console.error(e);
-    }
-    setIsOnboardingOpen(false);
-    showToast(`Welcome to Watch PY, ${profile.name}!`);
+  const handleSignOut = async () => {
+    await logoutAdminUser();
+    setAuthUser(null);
+    showToast('Signed out successfully.');
   };
 
   // Update Media Progress from Video Player
@@ -169,11 +285,45 @@ export default function App() {
       {/* Page Load Splash Animation */}
       {!isSplashFinished && <PageLoadSplash onFinish={() => setIsSplashFinished(true)} />}
 
-      {/* First Visit Onboarding Profile Setup */}
-      <OnboardingModal
-        isOpen={isOnboardingOpen}
-        onComplete={handleOnboardingComplete}
-        onSkip={() => setIsOnboardingOpen(false)}
+      {/* Auth Modal (Sign Up / Login) */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => {
+          setIsAuthOpen(false);
+          setAuthInterceptMessage(null);
+        }}
+        initialMode={authMode}
+        interceptMessage={authInterceptMessage}
+        onAuthSuccess={(email) => {
+          showToast(`Signed in as ${email}`);
+        }}
+      />
+
+      {/* Cinematic Avatar Studio Modal */}
+      <AvatarSelectorModal
+        isOpen={isAvatarStudioOpen}
+        onClose={() => setIsAvatarStudioOpen(false)}
+        currentAvatar={currentProfile.avatar}
+        currentName={currentProfile.name}
+        userUid={authUser?.uid}
+        onAvatarSaved={(newAvatar, newName) => {
+          setCurrentProfile((prev) => ({ ...prev, avatar: newAvatar, name: newName }));
+          showToast('Cinematic avatar saved to Firestore profile!');
+        }}
+      />
+
+      {/* Keyboard Navigation Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* Admin Panel Modal */}
+      <AdminPanel
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        allTitles={mediaList}
+        onPlayMedia={handlePlayMedia}
       />
 
       {/* Full-Screen Cinema Video Player */}
@@ -212,39 +362,90 @@ export default function App() {
         profiles={USER_PROFILES}
         onSelectProfile={setCurrentProfile}
         myListCount={myListIds.length}
-        onOpenOnboarding={() => setIsOnboardingOpen(true)}
+        onOpenAvatarStudio={() => setIsAvatarStudioOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenAdmin={() => setIsAdminOpen(true)}
+        isLoggedIn={!!authUser}
+        userEmail={authUser?.email}
+        onOpenAuth={(mode) => handleOpenAuth(mode)}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Areas */}
       <main className="relative z-10">
-        {/* Welcome Profile Greeting Pill Banner */}
+        {/* Welcome Profile Greeting / Guest CTA Banner */}
         <div className="pt-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between p-3.5 sm:p-4 rounded-2xl glass-panel border border-white/10 shadow-lg my-2">
-            <div className="flex items-center gap-3">
-              <img
-                src={currentProfile.avatar}
-                alt={currentProfile.name}
-                referrerPolicy="no-referrer"
-                className="w-10 h-10 rounded-full object-cover ring-2 ring-[#FFB238]"
-              />
-              <div>
-                <p className="text-xs font-mono-meta text-slate-400">Welcome back,</p>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <span>{currentProfile.name}</span>
-                  <span className="px-2 py-0.5 text-[10px] font-mono-meta bg-[#FFB238]/15 text-[#FFB238] rounded-full border border-[#FFB238]/30">
-                    4K Stream Pass Active
+          <div className="flex flex-wrap items-center justify-between p-3.5 sm:p-4 rounded-2xl glass-panel border border-white/10 shadow-lg my-2 gap-3">
+            {authUser ? (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsAvatarStudioOpen(true)}
+                  className="relative group focus:outline-none"
+                  title="Click to change cinematic avatar"
+                >
+                  <img
+                    src={currentProfile.avatar}
+                    alt={currentProfile.name}
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-[#2AC9B0] shadow-lg group-hover:scale-105 transition-transform"
+                  />
+                  <span className="absolute -bottom-1 -right-1 p-0.5 rounded-full bg-[#FFB238] text-black">
+                    <Sparkles className="w-2.5 h-2.5" />
                   </span>
-                </h3>
+                </button>
+                <div>
+                  <p className="text-xs font-mono-meta text-slate-400">Signed in as</p>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>{currentProfile.name || authUser.email || 'Watch PY Member'}</span>
+                    <span className="px-2 py-0.5 text-[10px] font-mono-meta bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/30">
+                      4K Pass Active
+                    </span>
+                  </h3>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-[#FFB238]/10 text-[#FFB238] border border-[#FFB238]/20">
+                  <LockKeyhole className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-mono-meta text-slate-400">Public Preview Mode</p>
+                  <h3 className="text-xs sm:text-sm font-semibold text-white">
+                    Explore movies & series catalog. Sign in or create an account to play titles.
+                  </h3>
+                </div>
+              </div>
+            )}
 
-            <button
-              onClick={() => setIsOnboardingOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-mono-meta text-slate-300 hover:text-white transition-colors"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-[#2AC9B0]" />
-              <span>Customize Avatar</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {authUser && (
+                <button
+                  onClick={() => setIsAvatarStudioOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#2AC9B0]/15 hover:bg-[#2AC9B0]/25 text-xs font-mono-meta text-[#2AC9B0] border border-[#2AC9B0]/30 font-bold transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#2AC9B0]" />
+                  <span>Avatar Studio</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => setIsAdminOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFB238]/15 hover:bg-[#FFB238]/25 text-xs font-mono-meta text-[#FFB238] border border-[#FFB238]/30 font-bold transition-colors"
+              >
+                <Shield className="w-3.5 h-3.5 text-[#FFB238]" />
+                <span>Admin Studio</span>
+              </button>
+
+              {!authUser && (
+                <button
+                  onClick={() => handleOpenAuth('signup', 'Sign up to streamWatch PY titles.')}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#FFB238] hover:bg-[#ffa312] text-xs font-bold text-black transition-colors shadow-md shadow-[#FFB238]/20"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Create Account</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
