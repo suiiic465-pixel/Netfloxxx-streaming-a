@@ -1,22 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navbar } from './components/Navbar';
 import { HeroCarousel } from './components/HeroCarousel';
 import { ContentRow } from './components/ContentRow';
-import { MediaDetailModal } from './components/MediaDetailModal';
-import { SearchOverlay } from './components/SearchOverlay';
 import { PageLoadSplash } from './components/PageLoadSplash';
-import { AuthModal } from './components/AuthModal';
-import { AvatarSelectorModal } from './components/AvatarSelectorModal';
-import { ShortcutsModal } from './components/ShortcutsModal';
-import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SkeletonRow } from './components/SkeletonRow';
 import { Footer } from './components/Footer';
-import { AdminPanel } from './components/AdminPanel';
 import { subscribeToTitles, subscribeToAuthState, logoutAdminUser, subscribeToUserProfileDoc, checkIsAdminUser } from './lib/firebaseService';
 import { HERO_SLIDES, ALL_MEDIA, USER_PROFILES, INITIAL_NOTIFICATIONS } from './data/mockData';
 import { MediaItem, UserProfile, AppNotification } from './types';
 import { Bookmark, Sparkles, Film, Tv, Play, Trash2, Shield, User, LockKeyhole } from 'lucide-react';
+
+// Lazy-load non-critical components to optimize initial bundle size & load speed
+const MediaDetailModal = lazy(() => import('./components/MediaDetailModal').then(m => ({ default: m.MediaDetailModal })));
+const SearchOverlay = lazy(() => import('./components/SearchOverlay').then(m => ({ default: m.SearchOverlay })));
+const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
+const AvatarSelectorModal = lazy(() => import('./components/AvatarSelectorModal').then(m => ({ default: m.AvatarSelectorModal })));
+const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then(m => ({ default: m.ShortcutsModal })));
+const VideoPlayerModal = lazy(() => import('./components/VideoPlayerModal').then(m => ({ default: m.VideoPlayerModal })));
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -46,7 +48,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Listen for unlisted private admin route (/admin or #admin) and redirect non-admin users
+  // Consolidated route listener for /admin or #admin URL access
   useEffect(() => {
     const checkAdminRoute = () => {
       const isNavigatingToAdmin = window.location.pathname === '/admin' || window.location.hash === '#admin';
@@ -70,16 +72,6 @@ export default function App() {
       window.removeEventListener('hashchange', checkAdminRoute);
     };
   }, [authUser, isAdmin]);
-
-  // Guard against non-admin users accessing admin panel
-  useEffect(() => {
-    const isNavigatingToAdmin = window.location.pathname === '/admin' || window.location.hash === '#admin';
-    if ((isAdminOpen || isNavigatingToAdmin) && authUser && !isAdmin) {
-      window.history.replaceState({}, '', '/');
-      setActiveTab('home');
-      setIsAdminOpen(false);
-    }
-  }, [authUser, isAdmin, isAdminOpen]);
 
   // Global Keyboard Navigation Shortcuts Handler
   useEffect(() => {
@@ -193,18 +185,6 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-  }, []);
-
-  // Route listener for /admin or #admin URL access
-  useEffect(() => {
-    const checkAdminRoute = () => {
-      if (window.location.hash === '#admin' || window.location.pathname === '/admin') {
-        setIsAdminOpen(true);
-      }
-    };
-    checkAdminRoute();
-    window.addEventListener('hashchange', checkAdminRoute);
-    return () => window.removeEventListener('hashchange', checkAdminRoute);
   }, []);
 
   // Persistent My List State
@@ -327,68 +307,75 @@ export default function App() {
       {/* Page Load Splash Animation */}
       {!isSplashFinished && <PageLoadSplash onFinish={() => setIsSplashFinished(true)} />}
 
-      {/* Auth Modal (Sign Up / Login) */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => {
-          setIsAuthOpen(false);
-          setAuthInterceptMessage(null);
-        }}
-        initialMode={authMode}
-        interceptMessage={authInterceptMessage}
-        onAuthSuccess={(email, userObj) => {
-          if (userObj) {
-            setAuthUser(userObj);
-            checkIsAdminUser(userObj).then((isUserAdmin) => setIsAdmin(isUserAdmin));
-          } else {
-            const fallbackUser = { uid: `user-${Date.now()}`, email };
-            setAuthUser(fallbackUser);
-            checkIsAdminUser(fallbackUser).then((isUserAdmin) => setIsAdmin(isUserAdmin));
-          }
-          showToast(`Signed in as ${email}`);
-        }}
-      />
+      {/* Suspense-wrapped Lazy Modals & Overlays */}
+      <Suspense fallback={null}>
+        {/* Auth Modal (Sign Up / Login) */}
+        {isAuthOpen && (
+          <AuthModal
+            isOpen={isAuthOpen}
+            onClose={() => {
+              setIsAuthOpen(false);
+              setAuthInterceptMessage(null);
+            }}
+            initialMode={authMode}
+            interceptMessage={authInterceptMessage}
+            onAuthSuccess={(email, userObj) => {
+              if (userObj) {
+                setAuthUser(userObj);
+                checkIsAdminUser(userObj).then((isUserAdmin) => setIsAdmin(isUserAdmin));
+              }
+              showToast(`Signed in as ${email}`);
+            }}
+          />
+        )}
 
-      {/* Cinematic Avatar Studio Modal */}
-      <AvatarSelectorModal
-        isOpen={isAvatarStudioOpen}
-        onClose={() => setIsAvatarStudioOpen(false)}
-        currentAvatar={currentProfile.avatar}
-        currentName={currentProfile.name}
-        userUid={authUser?.uid}
-        onAvatarSaved={(newAvatar, newName) => {
-          setCurrentProfile((prev) => ({ ...prev, avatar: newAvatar, name: newName }));
-          showToast('Cinematic avatar saved to Firestore profile!');
-        }}
-      />
+        {/* Cinematic Avatar Studio Modal */}
+        {isAvatarStudioOpen && (
+          <AvatarSelectorModal
+            isOpen={isAvatarStudioOpen}
+            onClose={() => setIsAvatarStudioOpen(false)}
+            currentAvatar={currentProfile.avatar}
+            currentName={currentProfile.name}
+            userUid={authUser?.uid}
+            onAvatarSaved={(newAvatar, newName) => {
+              setCurrentProfile((prev) => ({ ...prev, avatar: newAvatar, name: newName }));
+              showToast('Cinematic avatar saved to Firestore profile!');
+            }}
+          />
+        )}
 
-      {/* Keyboard Navigation Shortcuts Modal */}
-      <ShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
+        {/* Keyboard Navigation Shortcuts Modal */}
+        {isShortcutsOpen && (
+          <ShortcutsModal
+            isOpen={isShortcutsOpen}
+            onClose={() => setIsShortcutsOpen(false)}
+          />
+        )}
 
-      {/* Admin Panel Modal */}
-      <AdminPanel
-        isOpen={isAdminOpen}
-        onClose={() => {
-          setIsAdminOpen(false);
-          if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
-            window.history.replaceState({}, '', '/');
-          }
-        }}
-        allTitles={mediaList}
-        onPlayMedia={handlePlayMedia}
-      />
+        {/* Admin Panel Modal */}
+        {isAdminOpen && (
+          <AdminPanel
+            isOpen={isAdminOpen}
+            onClose={() => {
+              setIsAdminOpen(false);
+              if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
+                window.history.replaceState({}, '', '/');
+              }
+            }}
+            allTitles={mediaList}
+            onPlayMedia={handlePlayMedia}
+          />
+        )}
 
-      {/* Full-Screen Cinema Video Player */}
-      {playingMediaItem && (
-        <VideoPlayerModal
-          mediaItem={playingMediaItem}
-          onClose={() => setPlayingMediaId(null)}
-          onUpdateProgress={handleUpdateVideoProgress}
-        />
-      )}
+        {/* Full-Screen Cinema Video Player */}
+        {playingMediaItem && (
+          <VideoPlayerModal
+            mediaItem={playingMediaItem}
+            onClose={() => setPlayingMediaId(null)}
+            onUpdateProgress={handleUpdateVideoProgress}
+          />
+        )}
+      </Suspense>
 
       {/* Toast Feedback Banner */}
       <AnimatePresence>
@@ -691,28 +678,33 @@ export default function App() {
       {/* Footer */}
       <Footer />
 
-      {/* Interactive Detail Modal */}
-      {selectedMediaItem && (
-        <MediaDetailModal
-          mediaItem={selectedMediaItem}
-          onClose={() => setSelectedMediaId(null)}
-          onPlayMedia={handlePlayMedia}
-          myListIds={myListIds}
-          onToggleMyList={handleToggleMyList}
-          allMedia={mediaList}
-        />
-      )}
+      {/* Suspense-wrapped Detail & Search Modals */}
+      <Suspense fallback={null}>
+        {/* Interactive Detail Modal */}
+        {selectedMediaItem && (
+          <MediaDetailModal
+            mediaItem={selectedMediaItem}
+            onClose={() => setSelectedMediaId(null)}
+            onPlayMedia={handlePlayMedia}
+            myListIds={myListIds}
+            onToggleMyList={handleToggleMyList}
+            allMedia={mediaList}
+          />
+        )}
 
-      {/* Real-Time Search Overlay */}
-      <SearchOverlay
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        allMedia={mediaList}
-        onPlayMedia={handlePlayMedia}
-        onOpenInfoModal={handleOpenInfoModal}
-        myListIds={myListIds}
-        onToggleMyList={handleToggleMyList}
-      />
+        {/* Real-Time Search Overlay */}
+        {isSearchOpen && (
+          <SearchOverlay
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            allMedia={mediaList}
+            onPlayMedia={handlePlayMedia}
+            onOpenInfoModal={handleOpenInfoModal}
+            myListIds={myListIds}
+            onToggleMyList={handleToggleMyList}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

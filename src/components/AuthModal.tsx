@@ -166,19 +166,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         msg = 'This email is already registered. Please sign in instead.';
       } else if (err.code === 'auth/user-not-found') {
         msg = 'No account found with this email. Please sign up.';
-      } else if (
-        err.code === 'auth/operation-not-allowed' ||
-        err.code === 'auth/configuration-not-found' ||
-        (err.message && err.message.includes('configuration-not-found'))
-      ) {
-        // Fallback for environment demo auth / missing console config
-        const fallbackUser = { uid: `user-${Date.now()}`, email: email.trim() };
-        setIsSuccess(true);
-        setTimeout(() => {
-          onAuthSuccess(email.trim(), fallbackUser);
-          onClose();
-        }, 1500);
-        return;
       }
 
       setAuthError(msg);

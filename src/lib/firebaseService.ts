@@ -146,41 +146,11 @@ export function subscribeToTitles(onData: (items: MediaItem[]) => void) {
  * Authentication Helpers for Watch PY Admin Panel
  */
 export async function loginAdminUser(email: string, pass: string) {
-  try {
-    return await signInWithEmailAndPassword(auth, email, pass);
-  } catch (err: any) {
-    if (
-      err.code === 'auth/operation-not-allowed' ||
-      err.code === 'auth/configuration-not-found' ||
-      (err.message && err.message.includes('configuration-not-found'))
-    ) {
-      const fallbackUid = `admin-${Date.now()}`;
-      const fallbackUser = { uid: fallbackUid, email, role: 'admin' };
-      await promoteUserToAdmin(fallbackUid, email);
-      localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
-      return { user: fallbackUser };
-    }
-    throw err;
-  }
+  return await signInWithEmailAndPassword(auth, email, pass);
 }
 
 export async function createAdminUser(email: string, pass: string) {
-  try {
-    return await createUserWithEmailAndPassword(auth, email, pass);
-  } catch (err: any) {
-    if (
-      err.code === 'auth/operation-not-allowed' ||
-      err.code === 'auth/configuration-not-found' ||
-      (err.message && err.message.includes('configuration-not-found'))
-    ) {
-      const fallbackUid = `admin-${Date.now()}`;
-      const fallbackUser = { uid: fallbackUid, email, role: 'admin' };
-      await promoteUserToAdmin(fallbackUid, email);
-      localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
-      return { user: fallbackUser };
-    }
-    throw err;
-  }
+  return await createUserWithEmailAndPassword(auth, email, pass);
 }
 
 export async function loginAnonymousAdminUser() {
@@ -188,34 +158,12 @@ export async function loginAnonymousAdminUser() {
 }
 
 export async function logoutAdminUser() {
-  try {
-    localStorage.removeItem('watchpy_auth_user');
-  } catch (e) {
-    // ignore
-  }
   return await signOut(auth);
 }
 
-export function subscribeToAuthState(onUserChanged: (user: User | any) => void) {
-  const getStoredUser = () => {
-    try {
-      const raw = localStorage.getItem('watchpy_auth_user');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {
-      // ignore
-    }
-    return null;
-  };
-
+export function subscribeToAuthState(onUserChanged: (user: User | null) => void) {
   return onAuthStateChanged(auth, (user) => {
-    if (user) {
-      const uObj = { uid: user.uid, email: user.email };
-      localStorage.setItem('watchpy_auth_user', JSON.stringify(uObj));
-      onUserChanged(user);
-    } else {
-      const stored = getStoredUser();
-      onUserChanged(stored);
-    }
+    onUserChanged(user);
   });
 }
 
@@ -234,19 +182,13 @@ export interface FirestoreUserRecord {
 export async function saveUserToFirestore(uid: string, email: string) {
   try {
     const userDocRef = doc(db, 'users', uid);
-    const savePromise = setDoc(userDocRef, {
+    await setDoc(userDocRef, {
       uid,
       email,
       createdAt: new Date().toISOString(),
       createdAtTimestamp: serverTimestamp(),
       status: 'Active'
     }, { merge: true });
-
-    // Race with a 1s timeout so user registration never hangs on database sync
-    await Promise.race([
-      savePromise,
-      new Promise(resolve => setTimeout(resolve, 1000))
-    ]);
   } catch (err) {
     console.warn('Firestore write user record notice:', err);
   }
@@ -292,76 +234,18 @@ export function subscribeToUserProfileDoc(uid: string, onUpdate: (data: any) => 
   * Register a new user with Email/Password and store in Firestore 'users' collection.
   */
 export async function registerUserWithEmail(email: string, pass: string) {
-  try {
-    const authPromise = createUserWithEmailAndPassword(auth, email, pass);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), 3500)
-    );
-
-    const userCred = await Promise.race([authPromise, timeoutPromise]);
-    if (userCred.user) {
-      saveUserToFirestore(userCred.user.uid, userCred.user.email || email);
-      const userObj = { uid: userCred.user.uid, email: userCred.user.email || email };
-      localStorage.setItem('watchpy_auth_user', JSON.stringify(userObj));
-    }
-    return userCred;
-  } catch (err: any) {
-    console.warn('Firebase createUserWithEmailAndPassword notice:', err);
-
-    if (err.code === 'auth/email-already-in-use') {
-      throw err;
-    }
-
-    const fallbackUid = `user-${Date.now()}`;
-    saveUserToFirestore(fallbackUid, email);
-    const fallbackUser = { uid: fallbackUid, email };
-    localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
-    return { user: fallbackUser };
+  const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+  if (userCred.user) {
+    await saveUserToFirestore(userCred.user.uid, userCred.user.email || email);
   }
+  return userCred;
 }
 
 /**
   * Log in user with Email and Password.
   */
 export async function loginUserWithEmail(email: string, pass: string) {
-  try {
-    const authPromise = signInWithEmailAndPassword(auth, email, pass);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AUTH_TIMEOUT')), 3500)
-    );
-
-    const userCred = await Promise.race([authPromise, timeoutPromise]);
-    if (userCred.user) {
-      const userObj = { uid: userCred.user.uid, email: userCred.user.email || email };
-      localStorage.setItem('watchpy_auth_user', JSON.stringify(userObj));
-    }
-    return userCred;
-  } catch (err: any) {
-    console.warn('Firebase signInWithEmailAndPassword notice:', err);
-
-    if (
-      err.code === 'auth/wrong-password' ||
-      err.code === 'auth/invalid-credential' ||
-      err.code === 'auth/user-not-found'
-    ) {
-      const stored = localStorage.getItem('watchpy_auth_user');
-      if (stored) {
-        try {
-          const u = JSON.parse(stored);
-          if (u.email === email) {
-            return { user: u };
-          }
-        } catch (e) {}
-      }
-      throw err;
-    }
-
-    const fallbackUid = `user-${Date.now()}`;
-    saveUserToFirestore(fallbackUid, email);
-    const fallbackUser = { uid: fallbackUid, email };
-    localStorage.setItem('watchpy_auth_user', JSON.stringify(fallbackUser));
-    return { user: fallbackUser };
-  }
+  return await signInWithEmailAndPassword(auth, email, pass);
 }
 
 /**
